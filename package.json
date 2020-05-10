@@ -6,7 +6,9 @@
 		"node": ">=12.17.0 <13 || >=14.0.0"
 	},
 	"files": [
-		"dist/source"
+		"dist/source",
+		"source",
+		"!dist/source/worker.d.ts"
 	],
 	"main": "dist/source",
 	"types": "dist/source",
@@ -34,6 +36,9 @@
 		"delay": "^4.4.0",
 		"typescript": "^4.0.2",
 		"xo": "^0.33.1"
+	},
+	"dependencies": {
+		"never": "^1.0.2"
 	},
 	"peerDependencies": {
 		"ava": "*"
