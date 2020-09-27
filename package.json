@@ -1,0 +1,46 @@
+{
+	"name": "@ava/cooperate",
+	"version": "0.0.0",
+	"description": "Plugin to enable cooperation between AVA test files",
+	"engines": {
+		"node": ">=12.17.0 <13 || >=14.0.0"
+	},
+	"files": [
+		"dist/source",
+		"source",
+		"!dist/source/worker.d.ts"
+	],
+	"main": "dist/source",
+	"types": "dist/source",
+	"scripts": {
+		"build": "del-cli dist && tsc",
+		"prepare": "npm run -s build",
+		"test": "xo && c8 ava"
+	},
+	"keywords": [
+		"ava",
+		"lock",
+		"mutex",
+		"plugin",
+		"test"
+	],
+	"author": "Mark Wubben (https://novemberborn.net)",
+	"repository": "avajs/cooperate",
+	"license": "MIT",
+	"devDependencies": {
+		"@ava/typescript": "^1.1.1",
+		"@sindresorhus/tsconfig": "^0.7.0",
+		"ava": "^3.13.0",
+		"c8": "^7.3.1",
+		"del-cli": "^3.0.1",
+		"delay": "^4.4.0",
+		"typescript": "^4.0.3",
+		"xo": "^0.33.1"
+	},
+	"dependencies": {
+		"never": "^1.0.2"
+	},
+	"peerDependencies": {
+		"ava": "*"
+	}
+}
