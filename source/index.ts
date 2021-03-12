@@ -79,11 +79,92 @@ export class LockAcquisitionError extends Error {
 	}
 }
 
+export class Semaphore {
+	readonly #context: SharedContext;
+
+	constructor(
+		context: SharedContext,
+		public readonly id: string,
+		public readonly initialValue: number
+	) {
+		this.#context = context;
+	}
+
+	async down({wait = true, amount = 1} = {}) {
+		if (wait) {
+			await protocol.available;
+		}
+
+		const {id, initialValue} = this;
+		const message = protocol.publish({
+			type: MessageType.SEMAPHORE_DOWN,
+			contextId: this.#context.id,
+			semaphore: {id, initialValue},
+			wait,
+			amount
+		});
+
+		for await (const reply of message.replies()) {
+			if (reply.data.type === MessageType.SEMAPHORE_DECREASED) {
+				return;
+			}
+
+			if (reply.data.type === MessageType.SEMAPHORE_FAILED) {
+				throw new SemaphoreDownError(this.id, amount);
+			}
+
+			if (reply.data.type === MessageType.SEMAPHORE_MISMATCH) {
+				throw new SemaphoreMismatchError(this.id, this.initialValue, reply.data.initialValue);
+			}
+		}
+	}
+
+	async up({amount = 1} = {}) {
+		await protocol.available;
+
+		const {id, initialValue} = this;
+		protocol.publish({
+			type: MessageType.SEMAPHORE_UP,
+			contextId: this.#context.id,
+			semaphore: {id, initialValue},
+			amount
+		});
+	}
+}
+
+export class SemaphoreDownError extends Error {
+	get name() {
+		return 'SemaphoreDownError';
+	}
+
+	constructor(public readonly semaphoreId: string, public readonly amount: number) {
+		super('Could not immediately acquire the requested amount');
+	}
+}
+
+export class SemaphoreMismatchError extends Error {
+	get name() {
+		return 'SempahoreMismatchError';
+	}
+
+	constructor(
+		public readonly semaphoreId: string,
+		public readonly triedInitialValue: number,
+		public readonly actualInitialValue: number
+	) {
+		super('Failed to create semaphore due to mismatched initial values');
+	}
+}
+
 export class SharedContext {
 	constructor(public readonly id: string) {}
 
 	createLock(id: string): Lock {
 		return new Lock(this, id);
+	}
+
+	createSemaphore(id: string, value: number): Semaphore {
+		return new Semaphore(this, id, value);
 	}
 
 	async reserve<T extends bigint | number | string>(...values: T[]): Promise<T[]> {

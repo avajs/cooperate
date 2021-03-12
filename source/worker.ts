@@ -5,7 +5,9 @@ import {
 	Data,
 	Lock,
 	MessageType,
-	Reservation
+	Reservation,
+	SemaphoreDown,
+	SemaphoreUp
 } from './types';
 
 type ReceivedMessage = SharedWorker.Experimental.ReceivedMessage<Data>;
@@ -19,6 +21,10 @@ const factory: SharedWorker.Factory = async ({negotiateProtocol}) => {
 			void acquireLock(message, data);
 		} else if (data.type === MessageType.RESERVE) {
 			reserve(message, data);
+		} else if (data.type === MessageType.SEMAPHORE_DOWN) {
+			void downSemaphore(message, data);
+		} else if (data.type === MessageType.SEMAPHORE_UP) {
+			void upSemaphore(message, data);
 		}
 	}
 };
@@ -27,6 +33,7 @@ export default factory;
 
 type Context = {
 	locks: Map<string, {holderId: string; waiting: Array<{ holderId: string; notify: () => void }>}>;
+	semaphores: Map<string, Semaphore>;
 	reservedValues: Set<bigint | number | string>;
 };
 
@@ -35,6 +42,7 @@ const sharedContexts = new Map<string, Context>();
 function getContext(id: string): Context {
 	const context = sharedContexts.get(id) ?? {
 		locks: new Map(),
+		semaphores: new Map(),
 		reservedValues: new Set()
 	};
 	sharedContexts.set(id, context);
@@ -132,4 +140,96 @@ function reserve(message: ReceivedMessage, {contextId, values}: Reservation): vo
 	});
 
 	message.reply({type: MessageType.RESERVED_INDEXES, indexes});
+}
+
+// A weighted semaphore.
+// Waiting threads are woken in FIFO order.
+// tryDown() ignores waiting threads.
+class Semaphore {
+	public value: number;
+	public queue: Array<{amount: number; resolve: () => void}>;
+
+	constructor(public readonly initialValue: number) {
+		this.value = initialValue;
+		this.queue = []; // Likely O(n) dequeue, but ipc is probably the slow point
+	}
+
+	async down(amount = 1): Promise<void> {
+		if (this.queue.length > 0 || !this.tryDown(amount)) {
+			return new Promise(resolve => {
+				this.queue.push({amount, resolve});
+			});
+		}
+	}
+
+	tryDown(amount = 1): boolean {
+		if (this.value >= amount) {
+			this.value -= amount;
+			return true;
+		}
+
+		return false;
+	}
+
+	increase(amount = 1) {
+		this.value += amount;
+
+		while (this.queue.length > 0 && this.tryDown(this.queue[0].amount)) {
+			(this.queue.shift() ?? never('just checked queue is nonempty')).resolve();
+		}
+	}
+}
+
+async function downSemaphore(
+	message: ReceivedMessage,
+	{contextId, semaphore: {id, initialValue}, amount, wait}: SemaphoreDown
+): Promise<void> {
+	const context = getContext(contextId);
+	const semaphore = context.semaphores.get(id) ?? new Semaphore(initialValue);
+	context.semaphores.set(id, semaphore);
+
+	if (semaphore.initialValue !== initialValue) {
+		message.reply({
+			type: MessageType.SEMAPHORE_MISMATCH,
+			initialValue: semaphore.initialValue
+		});
+		return;
+	}
+
+	if (wait) {
+		await semaphore.down(amount);
+		message.reply({
+			type: MessageType.SEMAPHORE_DECREASED
+		});
+		return;
+	}
+
+	if (semaphore.tryDown(amount)) {
+		message.reply({
+			type: MessageType.SEMAPHORE_DECREASED
+		});
+	} else {
+		message.reply({
+			type: MessageType.SEMAPHORE_FAILED
+		});
+	}
+}
+
+function upSemaphore(
+	message: ReceivedMessage,
+	{contextId, semaphore: {id, initialValue}, amount}: SemaphoreUp
+) {
+	const context = getContext(contextId);
+	const semaphore = context.semaphores.get(id) ?? new Semaphore(initialValue);
+	context.semaphores.set(id, semaphore);
+
+	if (semaphore.initialValue !== initialValue) {
+		message.reply({
+			type: MessageType.SEMAPHORE_MISMATCH,
+			initialValue: semaphore.initialValue
+		});
+		return;
+	}
+
+	semaphore.increase(amount);
 }
