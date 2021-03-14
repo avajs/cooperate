@@ -91,6 +91,10 @@ export class Semaphore {
 	}
 
 	async down({wait = true, amount = 1} = {}) {
+		if (amount < 0) {
+			throw new RangeError('amount must be nonnegative');
+		}
+
 		if (wait) {
 			await protocol.available;
 		}
@@ -120,6 +124,10 @@ export class Semaphore {
 	}
 
 	async up({amount = 1} = {}) {
+		if (amount < 0) {
+			throw new RangeError('amount must be nonnegative');
+		}
+
 		await protocol.available;
 
 		const {id, initialValue} = this;
