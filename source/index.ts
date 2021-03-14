@@ -90,22 +90,49 @@ export class Semaphore {
 		this.#context = context;
 	}
 
-	async down({wait = true, amount = 1} = {}) {
+	async down(amount = 1) {
 		if (amount < 0) {
 			throw new RangeError('amount must be nonnegative');
 		}
 
-		if (wait) {
-			await protocol.available;
+		await protocol.available;
+
+		const {id, initialValue} = this;
+		const message = protocol.publish({
+			type: MessageType.SEMAPHORE_DOWN,
+			semaphore: {id, initialValue},
+			contextId: this.#context.id,
+			amount,
+			wait: true
+		});
+
+		for await (const reply of message.replies()) {
+			if (reply.data.type === MessageType.SEMAPHORE_DECREASED) {
+				return;
+			}
+
+			if (reply.data.type === MessageType.SEMAPHORE_MISMATCH) {
+				throw new SemaphoreMismatchError(id, initialValue, reply.data.initialValue);
+			}
+		}
+
+		/* c8 ignore next 2 */
+		// The above loop will never actually break if the resources are not acquired.
+		return never();
+	}
+
+	async downNow(amount = 1) {
+		if (amount < 0) {
+			throw new RangeError('amount must be nonnegative');
 		}
 
 		const {id, initialValue} = this;
 		const message = protocol.publish({
 			type: MessageType.SEMAPHORE_DOWN,
-			contextId: this.#context.id,
 			semaphore: {id, initialValue},
-			wait,
-			amount
+			contextId: this.#context.id,
+			amount,
+			wait: false
 		});
 
 		for await (const reply of message.replies()) {
@@ -114,16 +141,20 @@ export class Semaphore {
 			}
 
 			if (reply.data.type === MessageType.SEMAPHORE_FAILED) {
-				throw new SemaphoreDownError(this.id, amount);
+				throw new SemaphoreDownError(id, amount);
 			}
 
 			if (reply.data.type === MessageType.SEMAPHORE_MISMATCH) {
-				throw new SemaphoreMismatchError(this.id, this.initialValue, reply.data.initialValue);
+				throw new SemaphoreMismatchError(id, initialValue, reply.data.initialValue);
 			}
 		}
+
+		/* c8 ignore next 2 */
+		// The above loop will never actually break if the resources are not acquired.
+		return never();
 	}
 
-	async up({amount = 1} = {}) {
+	async up(amount = 1) {
 		if (amount < 0) {
 			throw new RangeError('amount must be nonnegative');
 		}

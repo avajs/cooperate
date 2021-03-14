@@ -8,7 +8,7 @@ test('acquire binary semaphore', async t => {
 	const first = semaphore.down();
 	await t.notThrowsAsync(first);
 
-	const error = await t.throwsAsync<SemaphoreDownError>(semaphore.down({wait: false}), {instanceOf: SemaphoreDownError});
+	const error = await t.throwsAsync<SemaphoreDownError>(semaphore.downNow(), {instanceOf: SemaphoreDownError});
 	t.is(error.semaphoreId, semaphore.id);
 
 	const second = semaphore.down();
@@ -35,8 +35,8 @@ async function probe(semaphore: Semaphore) {
 	let amount = 0;
 	try {
 		while (true) {
-			await semaphore.down({amount, wait: false});
-			await semaphore.up({amount});
+			await semaphore.downNow(amount);
+			await semaphore.up(amount);
 			amount++;
 		}
 	} catch (error) {
@@ -52,11 +52,11 @@ test('acquire counting semaphore', async t => {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 3);
 	const unblocked: number[] = [];
 
-	await semaphore.down({amount: 2}).then(() => unblocked.push(1));
+	await semaphore.down(2).then(() => unblocked.push(1));
 	t.is(await probe(semaphore), 1);
-	const second = semaphore.down({amount: 2}).then(() => unblocked.push(2)); // eslint-disable-line promise/prefer-await-to-then
+	const second = semaphore.down(2).then(() => unblocked.push(2)); // eslint-disable-line promise/prefer-await-to-then
 	t.is(await probe(semaphore), 1);
-	const third = semaphore.down({amount: 1}).then(() => unblocked.push(3)); // eslint-disable-line promise/prefer-await-to-then
+	const third = semaphore.down().then(() => unblocked.push(3)); // eslint-disable-line promise/prefer-await-to-then
 	t.is(await probe(semaphore), 1);
 	await semaphore.up();
 	await second;
@@ -71,13 +71,13 @@ test('increment semaphore before decrementing', async t => {
 	t.is(await probe(semaphore), 0);
 	await semaphore.up();
 	t.is(await probe(semaphore), 1);
-	await semaphore.down({wait: false});
+	await semaphore.downNow();
 });
 
 test('can\'t down() or up() by negative numbers', async t => {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 0);
-	await t.throwsAsync(semaphore.down({amount: -1}), {instanceOf: RangeError});
-	await t.throwsAsync(semaphore.up({amount: -1}), {instanceOf: RangeError});
+	await t.throwsAsync(semaphore.down(-1), {instanceOf: RangeError});
+	await t.throwsAsync(semaphore.up(-1), {instanceOf: RangeError});
 });
 
 test('attempt to down() semaphore concurrently in different processes', async t => {
@@ -89,7 +89,7 @@ test('attempt to down() semaphore concurrently in different processes', async t 
 
 	const semaphore = context.createSemaphore(t.title, 2);
 	// Acquire two units
-	await semaphore.down({amount: 2});
+	await semaphore.down(2);
 	// Let them try
 	release();
 	// Wait for them

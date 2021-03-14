@@ -13,7 +13,7 @@ test('attempt to down() semaphore concurrently in different processes', async t 
 	// Wait for them
 	await theirs.acquire();
 	// They hold the resources; try to get them
-	await t.throwsAsync(semaphore.down({wait: false}), {instanceOf: SemaphoreDownError});
+	await t.throwsAsync(semaphore.downNow(), {instanceOf: SemaphoreDownError});
 	const result = semaphore.down();
 	// Signal them to release
 	release();
