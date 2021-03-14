@@ -74,6 +74,12 @@ test('increment semaphore before decrementing', async t => {
 	await semaphore.down({wait: false});
 });
 
+test('can\'t down() or up() by negative numbers', async t => {
+	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 0);
+	await t.throwsAsync(semaphore.down({amount: -1}), {instanceOf: RangeError});
+	await t.throwsAsync(semaphore.up({amount: -1}), {instanceOf: RangeError});
+});
+
 test('attempt to down() semaphore concurrently in different processes', async t => {
 	const {context, release, theirs} = await synchronize({
 		context: new SharedContext(t.title),
