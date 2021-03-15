@@ -114,7 +114,7 @@ try {
 }
 ```
 
-Semaphores have two operations, `down()` to decrement/acquire and `up()` to increment/release:
+Semaphores have three methods, `down()` and `downNow()` to decrement/acquire and `up()` to increment/release:
 
 ```js
 await semaphore.down();
