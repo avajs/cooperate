@@ -143,15 +143,15 @@ function reserve(message: ReceivedMessage, {contextId, values}: Reservation): vo
 }
 
 // A weighted semaphore.
-// Waiting threads are woken in FIFO order.
-// tryDown() ignores waiting threads.
+// Waiting threads are woken in FIFO order (the semaphore is "fair").
+// tryDown() ignores waiting threads (it may "barge").
 class Semaphore {
 	public value: number;
 	public queue: Array<{amount: number; resolve: () => void}>;
 
 	constructor(public readonly initialValue: number) {
 		this.value = initialValue;
-		this.queue = []; // Likely O(n) dequeue, but ipc is probably the slow point
+		this.queue = []; // Likely O(n) dequeue, but probably not a bottleneck
 	}
 
 	async down(amount = 1): Promise<void> {
