@@ -24,7 +24,7 @@ const factory: SharedWorker.Factory = async ({negotiateProtocol}) => {
 		} else if (data.type === MessageType.SEMAPHORE_DOWN) {
 			void downSemaphore(message, data);
 		} else if (data.type === MessageType.SEMAPHORE_UP) {
-			void upSemaphore(message, data);
+			upSemaphore(message, data);
 		}
 	}
 };
