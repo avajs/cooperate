@@ -82,6 +82,18 @@ test('can\'t createSemaphore(), down(), or up() by negative numbers', async t =>
 	await t.throwsAsync(semaphore.up(-1), {instanceOf: RangeError});
 });
 
+test('semaphore value can be non-integral', async t => {
+	const context = new SharedContext(test.meta.file);
+	const semaphore = context.createSemaphore(t.title, 1.5);
+	await semaphore.down(0.5);
+	await semaphore.down(0.5);
+	await t.throwsAsync(semaphore.downNow(1));
+	await t.notThrowsAsync(semaphore.downNow(0.5));
+	await semaphore.up(1.5);
+	await t.throwsAsync(semaphore.downNow(2));
+	await t.notThrowsAsync(semaphore.downNow(1.5));
+});
+
 test('attempt to down() semaphore concurrently in different processes', async t => {
 	const {context, release, theirs} = await synchronize({
 		context: new SharedContext(t.title),
