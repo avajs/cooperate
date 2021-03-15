@@ -74,8 +74,10 @@ test('increment semaphore before decrementing', async t => {
 	await semaphore.downNow();
 });
 
-test('can\'t down() or up() by negative numbers', async t => {
-	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 0);
+test('can\'t createSemaphore(), down(), or up() by negative numbers', async t => {
+	const context = new SharedContext(test.meta.file);
+	t.throws(() => context.createSemaphore(t.title, -1), {instanceOf: RangeError});
+	const semaphore = context.createSemaphore(t.title, 0);
 	await t.throwsAsync(semaphore.down(-1), {instanceOf: RangeError});
 	await t.throwsAsync(semaphore.up(-1), {instanceOf: RangeError});
 });

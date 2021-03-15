@@ -88,6 +88,10 @@ export class Semaphore {
 		public readonly initialValue: number
 	) {
 		this.#context = context;
+
+		if (initialValue < 0) {
+			throw new RangeError('initialValue must be nonnegative');
+		}
 	}
 
 	async down(amount = 1) {
