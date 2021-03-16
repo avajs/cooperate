@@ -199,14 +199,14 @@ async function downSemaphore(
 	if (wait) {
 		await semaphore.down(amount);
 		message.reply({
-			type: MessageType.SEMAPHORE_DECREASED
+			type: MessageType.SEMAPHORE_SUCCEEDED
 		});
 		return;
 	}
 
 	if (semaphore.tryDown(amount)) {
 		message.reply({
-			type: MessageType.SEMAPHORE_DECREASED
+			type: MessageType.SEMAPHORE_SUCCEEDED
 		});
 	} else {
 		message.reply({
@@ -232,4 +232,8 @@ function upSemaphore(
 	}
 
 	semaphore.increase(amount);
+
+	message.reply({
+		type: MessageType.SEMAPHORE_SUCCEEDED
+	});
 }

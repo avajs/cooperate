@@ -26,6 +26,7 @@ test('can\'t register mismatched initial values', async t => {
 	await semaphoreOne.down();
 	const semaphoreTwo = context.createSemaphore(t.title, 2);
 	await t.throwsAsync<SemaphoreMismatchError>(semaphoreTwo.down(), {instanceOf: SemaphoreMismatchError});
+	await t.throwsAsync<SemaphoreMismatchError>(semaphoreTwo.up(), {instanceOf: SemaphoreMismatchError});
 });
 
 // Tries to down() the semaphore at increasing amounts. Returns the last amount

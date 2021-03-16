@@ -111,7 +111,7 @@ export class Semaphore {
 		});
 
 		for await (const reply of message.replies()) {
-			if (reply.data.type === MessageType.SEMAPHORE_DECREASED) {
+			if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
 				return;
 			}
 
@@ -140,7 +140,7 @@ export class Semaphore {
 		});
 
 		for await (const reply of message.replies()) {
-			if (reply.data.type === MessageType.SEMAPHORE_DECREASED) {
+			if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
 				return;
 			}
 
@@ -166,12 +166,26 @@ export class Semaphore {
 		await protocol.available;
 
 		const {id, initialValue} = this;
-		protocol.publish({
+		const message = protocol.publish({
 			type: MessageType.SEMAPHORE_UP,
 			contextId: this.#context.id,
 			semaphore: {id, initialValue},
 			amount
 		});
+
+		for await (const reply of message.replies()) {
+			if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
+				return;
+			}
+
+			if (reply.data.type === MessageType.SEMAPHORE_MISMATCH) {
+				throw new SemaphoreMismatchError(id, initialValue, reply.data.initialValue);
+			}
+		}
+
+		/* c8 ignore next 2 */
+		// The above loop will never actually break if the resources are not acquired.
+		return never();
 	}
 }
 
