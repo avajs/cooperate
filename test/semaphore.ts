@@ -1,5 +1,5 @@
 import test from 'ava';
-import {SharedContext, SemaphoreMismatchError, SemaphoreDownError, Semaphore} from '../source';
+import {SharedContext, SemaphoreCreationError, SemaphoreDownError, Semaphore} from '../source';
 import synchronize from './_synchronize';
 
 test('acquire binary semaphore', async t => {
@@ -25,8 +25,8 @@ test('can\'t register mismatched initial values', async t => {
 	const semaphoreOne = context.createSemaphore(t.title, 1);
 	await semaphoreOne.down();
 	const semaphoreTwo = context.createSemaphore(t.title, 2);
-	await t.throwsAsync<SemaphoreMismatchError>(semaphoreTwo.down(), {instanceOf: SemaphoreMismatchError});
-	await t.throwsAsync<SemaphoreMismatchError>(semaphoreTwo.up(), {instanceOf: SemaphoreMismatchError});
+	await t.throwsAsync<SemaphoreCreationError>(semaphoreTwo.down(), {instanceOf: SemaphoreCreationError});
+	await t.throwsAsync<SemaphoreCreationError>(semaphoreTwo.up(), {instanceOf: SemaphoreCreationError});
 });
 
 // Tries to down() the semaphore at increasing amounts. Returns the last amount

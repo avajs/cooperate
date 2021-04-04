@@ -115,8 +115,8 @@ export class Semaphore {
 				return;
 			}
 
-			if (reply.data.type === MessageType.SEMAPHORE_MISMATCH) {
-				throw new SemaphoreMismatchError(id, initialValue, reply.data.initialValue);
+			if (reply.data.type === MessageType.SEMAPHORE_CREATION_FAILED) {
+				throw new SemaphoreCreationError(id, initialValue, reply.data.initialValue);
 			}
 		}
 
@@ -148,8 +148,8 @@ export class Semaphore {
 				throw new SemaphoreDownError(id, amount);
 			}
 
-			if (reply.data.type === MessageType.SEMAPHORE_MISMATCH) {
-				throw new SemaphoreMismatchError(id, initialValue, reply.data.initialValue);
+			if (reply.data.type === MessageType.SEMAPHORE_CREATION_FAILED) {
+				throw new SemaphoreCreationError(id, initialValue, reply.data.initialValue);
 			}
 		}
 
@@ -178,8 +178,8 @@ export class Semaphore {
 				return;
 			}
 
-			if (reply.data.type === MessageType.SEMAPHORE_MISMATCH) {
-				throw new SemaphoreMismatchError(id, initialValue, reply.data.initialValue);
+			if (reply.data.type === MessageType.SEMAPHORE_CREATION_FAILED) {
+				throw new SemaphoreCreationError(id, initialValue, reply.data.initialValue);
 			}
 		}
 
@@ -199,9 +199,9 @@ export class SemaphoreDownError extends Error {
 	}
 }
 
-export class SemaphoreMismatchError extends Error {
+export class SemaphoreCreationError extends Error {
 	get name() {
-		return 'SempahoreMismatchError';
+		return 'SempahoreCreationError';
 	}
 
 	constructor(
@@ -209,7 +209,7 @@ export class SemaphoreMismatchError extends Error {
 		public readonly triedInitialValue: number,
 		public readonly actualInitialValue: number
 	) {
-		super('Failed to create semaphore due to mismatched initial values');
+		super('Failed to create semaphore');
 	}
 }
 

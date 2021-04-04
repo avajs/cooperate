@@ -9,7 +9,7 @@ export const enum MessageType {
 	SEMAPHORE_UP = 31,
 	SEMAPHORE_SUCCEEDED = 32,
 	SEMAPHORE_FAILED = 33,
-	SEMAPHORE_MISMATCH = 34,
+	SEMAPHORE_CREATION_FAILED = 34,
 }
 
 export type Lock = {
@@ -62,12 +62,12 @@ export type SemaphoreResult = {
 	type: MessageType.SEMAPHORE_SUCCEEDED | MessageType.SEMAPHORE_FAILED;
 };
 
-export type SemaphoreMismatch = {
-	type: MessageType.SEMAPHORE_MISMATCH;
+export type SemaphoreCreationFailed = {
+	type: MessageType.SEMAPHORE_CREATION_FAILED;
 	initialValue: number;
 };
 
 export type Data =
 	Lock | Locked | LockRelease |
 	Reservation | ReservedIndexes |
-	SemaphoreDown | SemaphoreResult | SemaphoreUp | SemaphoreMismatch;
+	SemaphoreDown | SemaphoreResult | SemaphoreUp | SemaphoreCreationFailed;

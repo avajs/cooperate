@@ -190,7 +190,7 @@ async function downSemaphore(
 
 	if (semaphore.initialValue !== initialValue) {
 		message.reply({
-			type: MessageType.SEMAPHORE_MISMATCH,
+			type: MessageType.SEMAPHORE_CREATION_FAILED,
 			initialValue: semaphore.initialValue
 		});
 		return;
@@ -225,7 +225,7 @@ function upSemaphore(
 
 	if (semaphore.initialValue !== initialValue) {
 		message.reply({
-			type: MessageType.SEMAPHORE_MISMATCH,
+			type: MessageType.SEMAPHORE_CREATION_FAILED,
 			initialValue: semaphore.initialValue
 		});
 		return;

@@ -106,8 +106,8 @@ const semaphore = context.createSemaphore('semaphore', 1);
 try {
   await semaphore.down();
 } catch (error) {
-  // error instanceof SemaphoreMismatchError
-  // error.name === 'SemaphoreMismatchError'
+  // error instanceof SemaphoreCreationError
+  // error.name === 'SemaphoreCreationError'
   // error.semaphoreId === 'semaphore'
   // error.triedInitialValue === 1
   // error.actualInitialValue === 0
