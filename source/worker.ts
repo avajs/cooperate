@@ -147,19 +147,27 @@ function reserve(message: ReceivedMessage, {contextId, values}: Reservation): vo
 // tryDown() ignores waiting threads (it may "barge").
 class Semaphore {
 	public value: number;
-	public queue: Array<{amount: number; resolve: () => void}>;
+	public queue: Array<{id?: string; amount: number; resolve: () => void}>;
 
 	constructor(public readonly initialValue: number) {
 		this.value = initialValue;
 		this.queue = []; // Likely O(n) dequeue, but probably not a bottleneck
 	}
 
-	async down(amount = 1): Promise<void> {
+	// Down the semaphore by amount, waiting first if necessary, associating the
+	// acquisition with id. Callback is called once, synchronously, when the
+	// decrement occurs.
+	async down(amount = 1, id?: string, callback?: () => void): Promise<void> {
 		if (this.queue.length > 0 || !this.tryDown(amount)) {
 			return new Promise(resolve => {
-				this.queue.push({amount, resolve});
+				this.queue.push({id, amount, resolve: () => {
+					callback?.();
+					resolve();
+				}});
 			});
 		}
+
+		callback?.();
 	}
 
 	tryDown(amount = 1): boolean {
@@ -193,6 +201,45 @@ async function downSemaphore(
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
 			initialValue: semaphore.initialValue
 		});
+		return;
+	}
+
+	const track = true;
+	if (track) {
+		let release;
+		if (wait) {
+			let acquired = false;
+			release = message.testWorker.teardown(() => {
+				if (acquired) {
+					semaphore.up(amount);
+				} else {
+					// The waiter will never be woken, but that's fine since the test
+					// worker's already exitted.
+					semaphore.queue = semaphore.queue.filter(({id}) => id === message.id);
+				}
+			});
+
+			await semaphore.down(amount, message.id, () => {
+				acquired = true;
+			});
+		} else if (semaphore.tryDown(amount)) {
+			release = message.testWorker.teardown(() => {
+				semaphore.up(amount);
+			});
+		} else {
+			message.reply({type: MessageType.SEMAPHORE_FAILED});
+			return;
+		}
+
+		for await (const {data} of message.reply({
+			type: MessageType.SEMAPHORE_SUCCEEDED
+		}).replies()) {
+			if (data.type === MessageType.SEMAPHORE_UP) {
+				release();
+				break;
+			}
+		}
+
 		return;
 	}
 

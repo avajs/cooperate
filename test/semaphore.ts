@@ -114,3 +114,18 @@ test('attempt to down() semaphore concurrently in different processes', async t 
 
 	t.pass();
 });
+
+test('semaphore is cleaned up when a test worker exits', async t => {
+	const {context, theirs} = await synchronize({
+		context: new SharedContext(t.title),
+		ours: 'unused',
+		theirs: 'torn down'
+	});
+	const semaphore = context.createSemaphore(t.title, 1);
+
+	// Wait for them to exit
+	await theirs.acquire();
+
+	// Try to acquire the semaphore
+	await t.notThrowsAsync(semaphore.downNow());
+});
