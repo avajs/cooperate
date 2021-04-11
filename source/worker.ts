@@ -171,7 +171,7 @@ class Semaphore {
 		return false;
 	}
 
-	increase(amount = 1) {
+	up(amount = 1) {
 		this.value += amount;
 
 		while (this.queue.length > 0 && this.tryDown(this.queue[0].amount)) {
@@ -231,7 +231,7 @@ function upSemaphore(
 		return;
 	}
 
-	semaphore.increase(amount);
+	semaphore.up(amount);
 
 	message.reply({
 		type: MessageType.SEMAPHORE_SUCCEEDED
