@@ -127,5 +127,5 @@ test('semaphore is cleaned up when a test worker exits', async t => {
 	await theirs.acquire();
 
 	// Try to acquire the semaphore
-	await t.notThrowsAsync(semaphore.downNow());
+	await t.notThrowsAsync(semaphore.acquireNow());
 });

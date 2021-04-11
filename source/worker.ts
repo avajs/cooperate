@@ -190,7 +190,7 @@ class Semaphore {
 
 async function downSemaphore(
 	message: ReceivedMessage,
-	{contextId, semaphore: {id, initialValue}, amount, wait}: SemaphoreDown
+	{contextId, semaphore: {id, initialValue}, amount, wait, track}: SemaphoreDown
 ): Promise<void> {
 	const context = getContext(contextId);
 	const semaphore = context.semaphores.get(id) ?? new Semaphore(initialValue);
@@ -204,7 +204,6 @@ async function downSemaphore(
 		return;
 	}
 
-	const track = true;
 	if (track) {
 		let release;
 		if (wait) {
@@ -234,7 +233,7 @@ async function downSemaphore(
 		for await (const {data} of message.reply({
 			type: MessageType.SEMAPHORE_SUCCEEDED
 		}).replies()) {
-			if (data.type === MessageType.SEMAPHORE_UP) {
+			if (data.type === MessageType.SEMAPHORE_RELEASE) {
 				release();
 				break;
 			}

@@ -10,6 +10,7 @@ export const enum MessageType {
 	SEMAPHORE_SUCCEEDED = 32,
 	SEMAPHORE_FAILED = 33,
 	SEMAPHORE_CREATION_FAILED = 34,
+	SEMAPHORE_RELEASE = 35,
 }
 
 export type Lock = {
@@ -49,6 +50,7 @@ export type SemaphoreDown = {
 	semaphore: SemaphoreData;
 	amount: number;
 	wait: boolean;
+	track: boolean;
 };
 
 export type SemaphoreUp = {
@@ -56,6 +58,10 @@ export type SemaphoreUp = {
 	contextId: string;
 	semaphore: SemaphoreData;
 	amount: number;
+};
+
+export type SemaphoreRelease = {
+	type: MessageType.SEMAPHORE_RELEASE;
 };
 
 export type SemaphoreResult = {
@@ -70,4 +76,4 @@ export type SemaphoreCreationFailed = {
 export type Data =
 	Lock | Locked | LockRelease |
 	Reservation | ReservedIndexes |
-	SemaphoreDown | SemaphoreResult | SemaphoreUp | SemaphoreCreationFailed;
+	SemaphoreDown | SemaphoreResult | SemaphoreUp | SemaphoreRelease | SemaphoreCreationFailed;
