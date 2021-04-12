@@ -95,69 +95,23 @@ export class Semaphore {
 	}
 
 	async down(amount = 1) {
-		if (amount < 0) {
-			throw new RangeError('amount must be nonnegative');
-		}
-
-		await protocol.available;
-
-		const {id, initialValue} = this;
-		const message = protocol.publish({
-			type: MessageType.SEMAPHORE_DOWN,
-			semaphore: {id, initialValue},
-			contextId: this.#context.id,
+		return downSemaphore({
 			amount,
+			contextId: this.#context.id,
+			semaphore: this,
 			wait: true,
 			track: false
 		});
-
-		for await (const reply of message.replies()) {
-			if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
-				return;
-			}
-
-			if (reply.data.type === MessageType.SEMAPHORE_CREATION_FAILED) {
-				throw new SemaphoreCreationError(id, initialValue, reply.data.initialValue);
-			}
-		}
-
-		/* c8 ignore next 2 */
-		// The above loop will never actually break if the resources are not acquired.
-		return never();
 	}
 
 	async downNow(amount = 1) {
-		if (amount < 0) {
-			throw new RangeError('amount must be nonnegative');
-		}
-
-		const {id, initialValue} = this;
-		const message = protocol.publish({
-			type: MessageType.SEMAPHORE_DOWN,
-			semaphore: {id, initialValue},
-			contextId: this.#context.id,
+		return downSemaphore({
 			amount,
+			contextId: this.#context.id,
+			semaphore: this,
 			wait: false,
 			track: false
 		});
-
-		for await (const reply of message.replies()) {
-			if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
-				return;
-			}
-
-			if (reply.data.type === MessageType.SEMAPHORE_FAILED) {
-				throw new SemaphoreDownError(id, amount);
-			}
-
-			if (reply.data.type === MessageType.SEMAPHORE_CREATION_FAILED) {
-				throw new SemaphoreCreationError(id, initialValue, reply.data.initialValue);
-			}
-		}
-
-		/* c8 ignore next 2 */
-		// The above loop will never actually break if the resources are not acquired.
-		return never();
 	}
 
 	async up(amount = 1) {
@@ -191,82 +145,79 @@ export class Semaphore {
 	}
 
 	async acquire(amount = 1): Promise<() => void> {
-		if (amount < 0) {
-			throw new RangeError('amount must be nonnegative');
-		}
-
-		await protocol.available;
-
-		const {id, initialValue} = this;
-		const message = protocol.publish({
-			type: MessageType.SEMAPHORE_DOWN,
-			semaphore: {id, initialValue},
-			contextId: this.#context.id,
+		return downSemaphore({
 			amount,
-			wait: false,
+			contextId: this.#context.id,
+			semaphore: this,
+			wait: true,
 			track: true
 		});
-
-		for await (const reply of message.replies()) {
-			if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
-				return () => {
-					reply.reply({
-						type: MessageType.SEMAPHORE_RELEASE
-					});
-				};
-			}
-
-			if (reply.data.type === MessageType.SEMAPHORE_FAILED) {
-				throw new SemaphoreDownError(id, amount);
-			}
-
-			if (reply.data.type === MessageType.SEMAPHORE_CREATION_FAILED) {
-				throw new SemaphoreCreationError(id, initialValue, reply.data.initialValue);
-			}
-		}
-
-		/* c8 ignore next 2 */
-		// The above loop will never actually break if the resources are not acquired.
-		return never();
 	}
 
 	async acquireNow(amount = 1): Promise<() => void> {
-		if (amount < 0) {
-			throw new RangeError('amount must be nonnegative');
-		}
-
-		const {id, initialValue} = this;
-		const message = protocol.publish({
-			type: MessageType.SEMAPHORE_DOWN,
-			semaphore: {id, initialValue},
-			contextId: this.#context.id,
+		return downSemaphore({
 			amount,
+			contextId: this.#context.id,
+			semaphore: this,
 			wait: false,
 			track: true
 		});
+	}
+}
 
-		for await (const reply of message.replies()) {
-			if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
-				return () => {
-					reply.reply({
-						type: MessageType.SEMAPHORE_RELEASE
-					});
-				};
-			}
+type DownSemaphoreOptions = {
+	amount: number;
+	wait: boolean;
+	track: boolean;
+	contextId: string;
+	semaphore: {
+		id: string;
+		initialValue: number;
+	};
+};
+async function downSemaphore(options: DownSemaphoreOptions & {track: false}): Promise<void>;
+async function downSemaphore(options: DownSemaphoreOptions & {track: true}): Promise<() => void>;
+async function downSemaphore(options: DownSemaphoreOptions & {track: boolean}): Promise<void | (() => void)> {
+	const {amount, wait, track, semaphore: {id, initialValue}, contextId} = options;
 
-			if (reply.data.type === MessageType.SEMAPHORE_FAILED) {
-				throw new SemaphoreDownError(id, amount);
-			}
+	if (amount < 0) {
+		throw new RangeError('amount must be nonnegative');
+	}
 
-			if (reply.data.type === MessageType.SEMAPHORE_CREATION_FAILED) {
-				throw new SemaphoreCreationError(id, initialValue, reply.data.initialValue);
-			}
+	if (wait) {
+		await protocol.available;
+	}
+
+	const message = protocol.publish({
+		type: MessageType.SEMAPHORE_DOWN,
+		amount,
+		wait,
+		track,
+		semaphore: {id, initialValue},
+		contextId
+	});
+
+	for await (const reply of message.replies()) {
+		if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
+			return track ? () => {
+				reply.reply({
+					type: MessageType.SEMAPHORE_RELEASE
+				});
+			} : undefined;
 		}
 
-		/* c8 ignore next 2 */
-		// The above loop will never actually break if the resources are not acquired.
-		return never();
+		if (reply.data.type === MessageType.SEMAPHORE_FAILED) {
+			throw new SemaphoreDownError(id, amount);
+		}
+
+		if (reply.data.type === MessageType.SEMAPHORE_CREATION_FAILED) {
+			throw new SemaphoreCreationError(id, initialValue, reply.data.initialValue);
+		}
 	}
+
+	/* c8 ignore next 2 */
+	// The above loop will never actually break if the resources are not acquired.
+	return never();
 }
 
 export class SemaphoreDownError extends Error {
