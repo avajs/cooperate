@@ -204,56 +204,56 @@ async function downSemaphore(
 		return;
 	}
 
-	if (track) {
-		let release;
-		if (wait) {
-			let acquired = false;
-			release = message.testWorker.teardown(() => {
-				if (acquired) {
-					semaphore.up(amount);
-				} else {
-					// The waiter will never be woken, but that's fine since the test
-					// worker's already exitted.
-					semaphore.queue = semaphore.queue.filter(({id}) => id === message.id);
-				}
-			});
+	if (wait) {
+		let acquired = false;
 
-			await semaphore.down(amount, message.id, () => {
-				acquired = true;
-			});
-		} else if (semaphore.tryDown(amount)) {
-			release = message.testWorker.teardown(() => {
+		const release = track && message.testWorker.teardown(() => {
+			if (acquired) {
 				semaphore.up(amount);
-			});
-		} else {
-			message.reply({type: MessageType.SEMAPHORE_FAILED});
-			return;
-		}
+			} else {
+				// The waiter will never be woken, but that's fine since the test
+				// worker's already exitted.
+				semaphore.queue = semaphore.queue.filter(({id}) => id === message.id);
+			}
+		});
 
-		for await (const {data} of message.reply({
+		await semaphore.down(amount, message.id, () => {
+			acquired = true;
+		});
+
+		const reply = message.reply({
 			type: MessageType.SEMAPHORE_SUCCEEDED
-		}).replies()) {
-			if (data.type === MessageType.SEMAPHORE_RELEASE) {
-				release();
-				break;
+		});
+
+		if (release) {
+			for await (const {data} of reply.replies()) {
+				if (data.type === MessageType.SEMAPHORE_RELEASE) {
+					release();
+					break;
+				}
 			}
 		}
 
 		return;
 	}
 
-	if (wait) {
-		await semaphore.down(amount);
-		message.reply({
-			type: MessageType.SEMAPHORE_SUCCEEDED
-		});
-		return;
-	}
-
 	if (semaphore.tryDown(amount)) {
-		message.reply({
+		const reply = message.reply({
 			type: MessageType.SEMAPHORE_SUCCEEDED
 		});
+
+		if (track) {
+			const release = message.testWorker.teardown(() => {
+				semaphore.up(amount);
+			});
+
+			for await (const {data} of reply.replies()) {
+				if (data.type === MessageType.SEMAPHORE_RELEASE) {
+					release();
+					break;
+				}
+			}
+		}
 	} else {
 		message.reply({
 			type: MessageType.SEMAPHORE_FAILED
