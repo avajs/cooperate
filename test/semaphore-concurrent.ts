@@ -30,7 +30,10 @@ test('semaphore is cleaned up when a test worker exits', async t => {
 	const semaphore = context.createSemaphore(t.title, 1);
 
 	// Acquire the semaphore
-	await semaphore.acquire();
+	await semaphore.acquireNow();
+	// Over-acquire the semaphore
+	void semaphore.acquire();
+	void semaphore.acquire();
 
 	// Our lock will be released when we exit
 	t.pass();

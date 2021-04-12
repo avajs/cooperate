@@ -115,6 +115,48 @@ test('attempt to down() semaphore concurrently in different processes', async t 
 	t.pass();
 });
 
+async function probeTracked(semaphore: Semaphore): Promise<number> {
+	let amount = 0;
+	try {
+		while (true) {
+			const release = await semaphore.acquireNow(amount);
+			release();
+			amount++;
+		}
+	} catch (error) {
+		if (error instanceof SemaphoreDownError) {
+			return amount - 1;
+		}
+
+		throw error;
+	}
+}
+
+test('semaphore.acquire() works', async t => {
+	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 3);
+	const unblocked: number[] = [];
+
+	const one = semaphore.acquire(2);
+	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
+	one.then(() => unblocked.push(1));
+	const releaseOne = await one;
+	t.is(await probeTracked(semaphore), 1);
+	const two = semaphore.acquire(2);
+	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
+	two.then(() => unblocked.push(2));
+	t.is(await probeTracked(semaphore), 1);
+	const three = semaphore.acquire();
+	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
+	three.then(() => unblocked.push(3));
+	t.is(await probeTracked(semaphore), 1);
+	releaseOne();
+	const releaseTwo = await two;
+	t.is(await probeTracked(semaphore), 0);
+	releaseTwo();
+	await three;
+	t.deepEqual(unblocked, [1, 2, 3]);
+});
+
 test('semaphore is cleaned up when a test worker exits', async t => {
 	const {context, theirs} = await synchronize({
 		context: new SharedContext(t.title),
