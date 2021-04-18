@@ -212,8 +212,8 @@ async function downSemaphore(
 				semaphore.up(amount);
 			} else {
 				// The waiter will never be woken, but that's fine since the test
-				// worker's already exitted.
-				semaphore.queue = semaphore.queue.filter(({id}) => id === message.id);
+				// worker's already exited.
+				semaphore.queue = semaphore.queue.filter(({id}) => id !== message.id);
 			}
 		});
 
