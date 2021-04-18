@@ -230,7 +230,7 @@ export class SemaphoreDownError extends Error {
 	}
 
 	constructor(public readonly semaphoreId: string, public readonly amount: number) {
-		super('Could not immediately acquire the requested amount');
+		super(`Could not immediately decrement with ${amount}`);
 	}
 }
 
@@ -241,10 +241,10 @@ export class SemaphoreCreationError extends Error {
 
 	constructor(
 		public readonly semaphoreId: string,
-		public readonly triedInitialValue: number,
-		public readonly actualInitialValue: number
+		triedInitialValue: number,
+		actualInitialValue: number
 	) {
-		super('Failed to create semaphore');
+		super(`Failed to create semaphore: expected initial value ${actualInitialValue}, got ${triedInitialValue}`);
 	}
 }
 
@@ -255,8 +255,8 @@ export class SharedContext {
 		return new Lock(this, id);
 	}
 
-	createSemaphore(id: string, value: number): Semaphore {
-		return new Semaphore(this, id, value);
+	createSemaphore(id: string, initialValue: number): Semaphore {
+		return new Semaphore(this, id, initialValue);
 	}
 
 	async reserve<T extends bigint | number | string>(...values: T[]): Promise<T[]> {

@@ -33,8 +33,8 @@ export default factory;
 
 type Context = {
 	locks: Map<string, {holderId: string; waiting: Array<{ holderId: string; notify: () => void }>}>;
-	semaphores: Map<string, Semaphore>;
 	reservedValues: Set<bigint | number | string>;
+	semaphores: Map<string, Semaphore>;
 };
 
 const sharedContexts = new Map<string, Context>();
@@ -42,8 +42,8 @@ const sharedContexts = new Map<string, Context>();
 function getContext(id: string): Context {
 	const context = sharedContexts.get(id) ?? {
 		locks: new Map(),
-		semaphores: new Map(),
-		reservedValues: new Set()
+		reservedValues: new Set(),
+		semaphores: new Map()
 	};
 	sharedContexts.set(id, context);
 	return context;
@@ -142,35 +142,39 @@ function reserve(message: ReceivedMessage, {contextId, values}: Reservation): vo
 	message.reply({type: MessageType.RESERVED_INDEXES, indexes});
 }
 
-// A weighted semaphore.
+// A weighted, counting semaphore.
 // Waiting threads are woken in FIFO order (the semaphore is "fair").
 // tryDown() ignores waiting threads (it may "barge").
 class Semaphore {
 	public value: number;
-	public queue: Array<{id?: string; amount: number; resolve: () => void}>;
+	public queue: Array<{id: string; amount: number; resolve: () => void}>;
 
 	constructor(public readonly initialValue: number) {
 		this.value = initialValue;
-		this.queue = []; // Likely O(n) dequeue, but probably not a bottleneck
+		this.queue = [];
 	}
 
 	// Down the semaphore by amount, waiting first if necessary, associating the
 	// acquisition with id. Callback is called once, synchronously, when the
 	// decrement occurs.
-	async down(amount = 1, id?: string, callback?: () => void): Promise<void> {
+	async down(amount: number, id: string, callback: () => void): Promise<void> {
 		if (this.queue.length > 0 || !this.tryDown(amount)) {
 			return new Promise(resolve => {
-				this.queue.push({id, amount, resolve: () => {
-					callback?.();
-					resolve();
-				}});
+				this.queue.push({
+					id,
+					amount,
+					resolve() {
+						callback();
+						resolve();
+					}
+				});
 			});
 		}
 
 		callback?.();
 	}
 
-	tryDown(amount = 1): boolean {
+	tryDown(amount: number): boolean {
 		if (this.value >= amount) {
 			this.value -= amount;
 			return true;
@@ -179,23 +183,27 @@ class Semaphore {
 		return false;
 	}
 
-	up(amount = 1) {
+	up(amount: number) {
 		this.value += amount;
 
 		while (this.queue.length > 0 && this.tryDown(this.queue[0].amount)) {
-			(this.queue.shift() ?? never('just checked queue is nonempty')).resolve();
+			this.queue.shift()?.resolve();
 		}
 	}
+}
+
+function getSemaphore(contextId: string, id: string, initialValue: number): Semaphore {
+	const context = getContext(contextId);
+	const semaphore = context.semaphores.get(id) ?? new Semaphore(initialValue);
+	context.semaphores.set(id, semaphore);
+	return semaphore;
 }
 
 async function downSemaphore(
 	message: ReceivedMessage,
 	{contextId, semaphore: {id, initialValue}, amount, wait, track}: SemaphoreDown
 ): Promise<void> {
-	const context = getContext(contextId);
-	const semaphore = context.semaphores.get(id) ?? new Semaphore(initialValue);
-	context.semaphores.set(id, semaphore);
-
+	const semaphore = getSemaphore(contextId, id, initialValue);
 	if (semaphore.initialValue !== initialValue) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
@@ -265,10 +273,7 @@ function upSemaphore(
 	message: ReceivedMessage,
 	{contextId, semaphore: {id, initialValue}, amount}: SemaphoreUp
 ) {
-	const context = getContext(contextId);
-	const semaphore = context.semaphores.get(id) ?? new Semaphore(initialValue);
-	context.semaphores.set(id, semaphore);
-
+	const semaphore = getSemaphore(contextId, id, initialValue);
 	if (semaphore.initialValue !== initialValue) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
