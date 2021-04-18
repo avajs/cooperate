@@ -17,7 +17,7 @@ export class Lock {
 	}
 
 	async acquire(): Promise<() => void> {
-		// Allow reserve() to be called before the shared worker is availabe.
+		// Allow acquire() to be called before the shared worker is availabe.
 		await protocol.available;
 
 		const message = protocol.publish({
@@ -99,6 +99,9 @@ export class Semaphore {
 			throw new RangeError('amount must be non-negative');
 		}
 
+		// Allow down() to be called before the shared worker is availabe.
+		await protocol.available;
+
 		return downSemaphore({
 			amount,
 			contextId: this.#context.id,
@@ -112,6 +115,9 @@ export class Semaphore {
 		if (amount < 0) {
 			throw new RangeError('amount must be non-negative');
 		}
+
+		// Down immediately, which will fail if the protocol is not available.
+		// "Now" should not mean "wait until we're ready."
 
 		return downSemaphore({
 			amount,
@@ -127,6 +133,7 @@ export class Semaphore {
 			throw new RangeError('amount must be non-negative');
 		}
 
+		// Allow up() to be called before the shared worker is availabe.
 		await protocol.available;
 
 		const {id, initialValue} = this;
@@ -187,10 +194,6 @@ async function downSemaphore(options: DownSemaphoreOptions & {track: false}): Pr
 async function downSemaphore(options: DownSemaphoreOptions & {track: true}): Promise<() => void>;
 async function downSemaphore(options: DownSemaphoreOptions & {track: boolean}): Promise<void | (() => void)> {
 	const {amount, wait, track, semaphore: {id, initialValue}, contextId} = options;
-
-	if (wait) {
-		await protocol.available;
-	}
 
 	const message = protocol.publish({
 		type: MessageType.SEMAPHORE_DOWN,
