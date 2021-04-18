@@ -197,7 +197,7 @@ function getSemaphore(contextId: string, id: string, initialValue: number, autoR
 	let semaphore = context.semaphores.get(id);
 
 	if (semaphore !== undefined) {
-		return [semaphore.initialValue === initialValue && semaphore.autoRelease === autoRelease, semaphore];
+		return [semaphore.initialValue === initialValue, semaphore];
 	}
 
 	semaphore = new Semaphore(initialValue, autoRelease);
@@ -220,14 +220,14 @@ async function downSemaphore(
 	}
 
 	if (wait) {
-		let acquired = false;
+		let acquired = 0;
 
-		const release = message.testWorker.teardown(() => {
-			if (acquired && autoRelease) {
-				semaphore.up(amount);
+		const release = message.testWorker.teardown((clearQueue = true) => {
+			if (acquired > 0 && autoRelease) {
+				semaphore.up(acquired);
 			}
 
-			if (!acquired) {
+			if (clearQueue) {
 				// The waiter will never be woken, but that's fine since the test
 				// worker's already exited.
 				semaphore.queue = semaphore.queue.filter(({id}) => id !== message.id);
@@ -235,17 +235,26 @@ async function downSemaphore(
 		});
 
 		await semaphore.down(amount, message.id, () => {
-			acquired = true;
+			acquired = amount;
 		});
 
 		const reply = message.reply({
 			type: MessageType.SEMAPHORE_SUCCEEDED
 		});
 
-		for await (const {data} of reply.replies()) {
-			if (data.type === MessageType.SEMAPHORE_RELEASE) {
-				release();
-				break;
+		if (autoRelease) {
+			for await (const {data} of reply.replies()) {
+				if (data.type === MessageType.SEMAPHORE_RELEASE) {
+					if (acquired > 0) { // eslint-disable-line max-depth
+						semaphore.up(Math.min(acquired, data.amount));
+						acquired -= data.amount;
+					}
+
+					if (acquired <= 0) { // eslint-disable-line max-depth
+						release(false);
+						break;
+					}
+				}
 			}
 		}
 
@@ -253,19 +262,22 @@ async function downSemaphore(
 	}
 
 	if (semaphore.tryDown(amount)) {
-		let release = () => semaphore.up(amount);
-		if (autoRelease) {
-			release = message.testWorker.teardown(release);
-		}
-
 		const reply = message.reply({
 			type: MessageType.SEMAPHORE_SUCCEEDED
 		});
 
-		for await (const {data} of reply.replies()) {
-			if (data.type === MessageType.SEMAPHORE_RELEASE) {
-				release();
-				break;
+		if (autoRelease) {
+			const release = message.testWorker.teardown(() => semaphore.up(amount));
+			for await (const {data} of reply.replies()) {
+				if (data.type === MessageType.SEMAPHORE_RELEASE) {
+					semaphore.up(Math.min(amount, data.amount));
+					amount = Math.max(0, amount - data.amount);
+					if (amount === 0) { // eslint-disable-line max-depth
+						release(); // Remove teardown hook.
+					}
+
+					break;
+				}
 			}
 		}
 	} else {

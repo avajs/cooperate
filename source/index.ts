@@ -1,8 +1,10 @@
 import path from 'path';
-import {registerSharedWorker} from 'ava/plugin';
+import {registerSharedWorker, SharedWorker} from 'ava/plugin';
 import never from 'never';
 
 import {Data, MessageType, SemaphoreCreationFailed} from './types';
+
+type ReceivedMessage = SharedWorker.Plugin.Experimental.ReceivedMessage<Data>;
 
 const protocol = registerSharedWorker<Data>({
 	filename: path.join(__dirname, 'worker.js'),
@@ -79,20 +81,84 @@ export class LockAcquisitionError extends Error {
 	}
 }
 
-export class Semaphore {
+class Semaphore_ {
+	constructor(
+		public readonly id: string,
+		public readonly initialValue: number
+	) {
+		if (initialValue < 0) {
+			throw new RangeError('initialValue must be non-negative');
+		}
+	}
+}
+
+export class AcquiringSemaphore extends Semaphore_ {
 	readonly #context: SharedContext;
 
 	constructor(
 		context: SharedContext,
 		public readonly id: string,
-		public readonly initialValue: number,
-		public readonly autoRelease: boolean
+		public readonly initialValue: number
 	) {
+		super(id, initialValue);
 		this.#context = context;
+	}
 
-		if (initialValue < 0) {
-			throw new RangeError('initialValue must be non-negative');
+	async acquire(amount = 1) {
+		if (amount < 0) {
+			throw new RangeError('amount must be non-negative');
 		}
+
+		// Allow down() to be called before the shared worker is availabe.
+		await protocol.available;
+
+		const reply = await downSemaphore(this, this.#context.id, amount, true);
+		return (release = amount) => {
+			if (release < 0 || release > amount) {
+				throw new RangeError('Amount to release must be >= 0 and <= remaining amount');
+			}
+
+			amount -= release;
+			reply.reply({
+				type: MessageType.SEMAPHORE_RELEASE,
+				amount: release
+			});
+		};
+	}
+
+	async acquireNow(amount = 1) {
+		if (amount < 0) {
+			throw new RangeError('amount must be non-negative');
+		}
+
+		// Down immediately, which will fail if the protocol is not available.
+		// "Now" should not mean "wait until we're ready."
+
+		const reply = await downSemaphore(this, this.#context.id, amount, false);
+		return (release = amount) => {
+			if (release < 0 || release > amount) {
+				throw new RangeError('Amount to release must be >= 0 and <= remaining amount');
+			}
+
+			amount -= release;
+			reply.reply({
+				type: MessageType.SEMAPHORE_RELEASE,
+				amount: release
+			});
+		};
+	}
+}
+
+export class CountingSemaphore extends Semaphore_ {
+	readonly #context: SharedContext;
+
+	constructor(
+		context: SharedContext,
+		public readonly id: string,
+		public readonly initialValue: number
+	) {
+		super(id, initialValue);
+		this.#context = context;
 	}
 
 	async down(amount = 1) {
@@ -103,7 +169,7 @@ export class Semaphore {
 		// Allow down() to be called before the shared worker is availabe.
 		await protocol.available;
 
-		return downSemaphore(this, this.#context.id, amount, true);
+		await downSemaphore(this, this.#context.id, amount, true);
 	}
 
 	async downNow(amount = 1) {
@@ -114,7 +180,7 @@ export class Semaphore {
 		// Down immediately, which will fail if the protocol is not available.
 		// "Now" should not mean "wait until we're ready."
 
-		return downSemaphore(this, this.#context.id, amount, false);
+		await downSemaphore(this, this.#context.id, amount, false);
 	}
 
 	async up(amount = 1) {
@@ -125,10 +191,11 @@ export class Semaphore {
 		// Allow up() to be called before the shared worker is availabe.
 		await protocol.available;
 
+		const {id, initialValue} = this;
 		const message = protocol.publish({
 			type: MessageType.SEMAPHORE_UP,
 			contextId: this.#context.id,
-			semaphore: this,
+			semaphore: {autoRelease: false, id, initialValue},
 			amount
 		});
 
@@ -148,23 +215,21 @@ export class Semaphore {
 	}
 }
 
-async function downSemaphore(semaphore: Semaphore, contextId: string, amount: number, wait: boolean): Promise<() => void> {
-	const {autoRelease, id, initialValue} = semaphore;
+export type Semaphore = AcquiringSemaphore | CountingSemaphore;
+
+async function downSemaphore(semaphore: Semaphore_, contextId: string, amount: number, wait: boolean): Promise<ReceivedMessage> {
+	const {id, initialValue} = semaphore;
 	const message = protocol.publish({
 		type: MessageType.SEMAPHORE_DOWN,
 		contextId,
-		semaphore: {autoRelease, id, initialValue},
+		semaphore: {autoRelease: semaphore instanceof AcquiringSemaphore, id, initialValue},
 		amount,
 		wait
 	});
 
 	for await (const reply of message.replies()) {
 		if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
-			return () => {
-				reply.reply({
-					type: MessageType.SEMAPHORE_RELEASE
-				});
-			};
+			return reply;
 		}
 
 		if (reply.data.type === MessageType.SEMAPHORE_FAILED) {
@@ -198,8 +263,8 @@ export class SemaphoreCreationError extends Error {
 		return 'SempahoreCreationError';
 	}
 
-	constructor(semaphore: Semaphore, {autoRelease, initialValue}: SemaphoreCreationFailed) {
-		super(`Failed to create semaphore: expected initial value ${semaphore.initialValue} (got ${initialValue}) and auto-release ${String(semaphore.autoRelease)} (got ${String(autoRelease)})`);
+	constructor(semaphore: Semaphore_, {initialValue}: SemaphoreCreationFailed) {
+		super(`Failed to create semaphore: expected initial value ${semaphore.initialValue} (got ${initialValue})`);
 		this.semaphoreId = semaphore.id;
 	}
 }
@@ -211,8 +276,12 @@ export class SharedContext {
 		return new Lock(this, id);
 	}
 
-	createSemaphore(id: string, {autoRelease = true, initialValue = 0}: {autoRelease?: boolean; initialValue?: number} = {}): Semaphore {
-		return new Semaphore(this, id, initialValue, autoRelease);
+	createSemaphore(id: string, initialValue = 0): AcquiringSemaphore {
+		return new AcquiringSemaphore(this, id, initialValue);
+	}
+
+	createCountingSemaphore(id: string, initialValue = 0): CountingSemaphore {
+		return new CountingSemaphore(this, id, initialValue);
 	}
 
 	async reserve<T extends bigint | number | string>(...values: T[]): Promise<T[]> {

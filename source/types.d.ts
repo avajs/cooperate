@@ -62,6 +62,7 @@ export type SemaphoreUp = {
 
 export type SemaphoreRelease = {
 	type: MessageType.SEMAPHORE_RELEASE;
+	amount: number;
 };
 
 export type SemaphoreResult = {

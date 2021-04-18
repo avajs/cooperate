@@ -1,9 +1,9 @@
 import test from 'ava';
-import {SharedContext, SemaphoreCreationError, SemaphoreDownError, Semaphore} from '../source';
+import {SharedContext, SemaphoreCreationError, SemaphoreDownError, CountingSemaphore, AcquiringSemaphore} from '../source';
 import synchronize from './_synchronize';
 
 test('acquire binary semaphore', async t => {
-	const semaphore = new SharedContext(t.title).createSemaphore(t.title, {initialValue: 1});
+	const semaphore = new SharedContext(t.title).createCountingSemaphore(t.title, 1);
 
 	const first = semaphore.down();
 	await t.notThrowsAsync(first);
@@ -22,9 +22,9 @@ test('acquire binary semaphore', async t => {
 
 test('can\'t register mismatched initial values', async t => {
 	const context = new SharedContext(t.title);
-	const semaphoreOne = context.createSemaphore(t.title, {initialValue: 1});
+	const semaphoreOne = context.createCountingSemaphore(t.title, 1);
 	await semaphoreOne.down();
-	const semaphoreTwo = context.createSemaphore(t.title, {initialValue: 2});
+	const semaphoreTwo = context.createCountingSemaphore(t.title, 2);
 	await t.throwsAsync<SemaphoreCreationError>(semaphoreTwo.down(), {instanceOf: SemaphoreCreationError});
 	await t.throwsAsync<SemaphoreCreationError>(semaphoreTwo.up(), {instanceOf: SemaphoreCreationError});
 });
@@ -32,7 +32,7 @@ test('can\'t register mismatched initial values', async t => {
 // Tries to down() the semaphore at increasing amounts. Returns the last amount
 // that succeeds. _If_ nothing else is using the semaphore, this is the
 // semaphore's available capacity.
-async function probeManualRelease(semaphore: Semaphore) {
+async function probeManualRelease(semaphore: CountingSemaphore) {
 	let amount = 0;
 	try {
 		while (true) {
@@ -50,7 +50,7 @@ async function probeManualRelease(semaphore: Semaphore) {
 }
 
 test('acquire counting semaphore', async t => {
-	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, {autoRelease: false, initialValue: 3});
+	const semaphore = new SharedContext(test.meta.file).createCountingSemaphore(t.title, 3);
 	const unblocked: number[] = [];
 
 	await semaphore.down(2).then(() => unblocked.push(1));
@@ -68,7 +68,7 @@ test('acquire counting semaphore', async t => {
 });
 
 test('increment semaphore before decrementing', async t => {
-	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, {autoRelease: false});
+	const semaphore = new SharedContext(test.meta.file).createCountingSemaphore(t.title);
 	t.is(await probeManualRelease(semaphore), 0);
 	await semaphore.up();
 	t.is(await probeManualRelease(semaphore), 1);
@@ -77,15 +77,15 @@ test('increment semaphore before decrementing', async t => {
 
 test('can\'t createSemaphore(), down(), or up() by negative numbers', async t => {
 	const context = new SharedContext(test.meta.file);
-	t.throws(() => context.createSemaphore(t.title, {initialValue: -1}), {instanceOf: RangeError});
-	const semaphore = context.createSemaphore(t.title);
+	t.throws(() => context.createCountingSemaphore(t.title, -1), {instanceOf: RangeError});
+	const semaphore = context.createCountingSemaphore(t.title);
 	await t.throwsAsync(semaphore.down(-1), {instanceOf: RangeError});
 	await t.throwsAsync(semaphore.up(-1), {instanceOf: RangeError});
 });
 
 test('semaphore value can be non-integral', async t => {
 	const context = new SharedContext(test.meta.file);
-	const semaphore = context.createSemaphore(t.title, {initialValue: 1.5});
+	const semaphore = context.createCountingSemaphore(t.title, 1.5);
 	await semaphore.down(0.5);
 	await semaphore.down(0.5);
 	await t.throwsAsync(semaphore.downNow(1));
@@ -96,30 +96,30 @@ test('semaphore value can be non-integral', async t => {
 });
 
 test('attempt to down() semaphore concurrently in different processes', async t => {
-	const {context, release, theirs} = await synchronize({
+	const {context, release: releaseLock, theirs} = await synchronize({
 		context: new SharedContext(t.title),
 		ours: 'down-first',
 		theirs: 'down-second'
 	});
 
-	const semaphore = context.createSemaphore(t.title, {initialValue: 2});
+	const semaphore = context.createSemaphore(t.title, 2);
 	// Acquire two units
-	await semaphore.down(2);
+	const release = await semaphore.acquire(2);
 	// Let them try
-	release();
+	releaseLock();
 	// Wait for them
 	await theirs.acquire();
 	// Release one unit
-	await semaphore.up();
+	release(1);
 
 	t.pass();
 });
 
-async function probeAutoRelease(semaphore: Semaphore): Promise<number> {
+async function probeAutoRelease(semaphore: AcquiringSemaphore): Promise<number> {
 	let amount = 0;
 	try {
 		while (true) {
-			const release = await semaphore.downNow(amount);
+			const release = await semaphore.acquireNow(amount);
 			release();
 			amount++;
 		}
@@ -133,19 +133,19 @@ async function probeAutoRelease(semaphore: Semaphore): Promise<number> {
 }
 
 test('semaphore.down() works with auto-release', async t => {
-	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, {initialValue: 3});
+	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 3);
 	const unblocked: number[] = [];
 
-	const one = semaphore.down(2);
+	const one = semaphore.acquire(2);
 	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
 	one.then(() => unblocked.push(1));
 	const releaseOne = await one;
 	t.is(await probeAutoRelease(semaphore), 1);
-	const two = semaphore.down(2);
+	const two = semaphore.acquire(2);
 	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
 	two.then(() => unblocked.push(2));
 	t.is(await probeAutoRelease(semaphore), 1);
-	const three = semaphore.down();
+	const three = semaphore.acquire();
 	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
 	three.then(() => unblocked.push(3));
 	t.is(await probeAutoRelease(semaphore), 1);
@@ -163,11 +163,11 @@ test('semaphore is cleaned up when a test worker exits', async t => {
 		ours: 'unused',
 		theirs: 'torn down'
 	});
-	const semaphore = context.createSemaphore(t.title, {initialValue: 1});
+	const semaphore = context.createSemaphore(t.title, 1);
 
 	// Wait for them to exit
 	await theirs.acquire();
 
 	// Try to acquire the semaphore
-	await t.notThrowsAsync(semaphore.downNow());
+	await t.notThrowsAsync(semaphore.acquireNow());
 });
