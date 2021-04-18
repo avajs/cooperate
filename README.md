@@ -84,73 +84,56 @@ const reserved = await context.reserve(1, 2, 3);
 
 ### Semaphores
 
-You can create a semaphore within a shared context:
+You can create a [counting semaphore](https://www.guru99.com/semaphore-in-operating-system.html) within a shared context:
 
 ```js
-const initialValue = 3; // initialValue must be non-negative
-const semaphore = context.createSemaphore('my-semaphore', 3);
+const initialValue = 3; // Must be non-negative. Defaults to 0 if not provided.
+const semaphore = context.createSemaphore('my-semaphore', initialValue);
 ```
 
-If two test files try to create a semaphore with the same context and id and different initial values, the second attempt will fail and using the semaphore in that file will reject:
+Within the same context, semaphores with the same ID must be created with the same initial value. Semaphores created later, with a different value, are unusable. Their methods will reject with a `SemaphoreCreationError`.
+
+These semaphores have two methods: `acquire()` and `acquireNow()`:
+
+TODO: Explain counting behavior (decrements from initial value)
+TODO: Should acquireNow() throw a different error? Or find a more generic name?
+TODO: Explain release function, with partial increment
+TODO: Explain auto-release
+
+#### Lower-level counting semaphores
+
+You can create a lower-level counting semaphore which doesn't have any auto-release behavior. Instead you need to increment the semaphore in code.
 
 ```js
-// test/runs-first.js
-const context = new SharedContext('context');
-const semaphore = context.createSemaphore('semaphore', 0);
+const initialValue = 3; // Must be non-negative. Defaults to 0 if not provided.
+const semaphore = context.createCountingSemaphore('my-semaphore', initialValue);
 ```
 
-```js
-// test/runs-second.js
-const context = new SharedContext('context');
-const semaphore = context.createSemaphore('semaphore', 1);
-try {
-  await semaphore.down();
-} catch (error) {
-  // error instanceof SemaphoreCreationError
-  // error.name === 'SemaphoreCreationError'
-  // error.semaphoreId === 'semaphore'
-  // error.triedInitialValue === 1
-  // error.actualInitialValue === 0
-}
-```
+TODO: Initial-value rules apply. The same semaphore may be instantiated differently
+TODO: But the code inherits auto-release behavior from the first creation, instead of in the DOWN message
 
-Semaphores have three methods, `down()` and `downNow()` to decrement/acquire and `up()` to increment/release:
+These semaphores have three methods. `down()` and `downNow()` decrement the value and `up()` increments:
 
 ```js
 await semaphore.down();
 await semaphore.up();
 ```
 
-`down()` blocks until the semaphore is available. `downNow()` instead rejects with a `SemaphoreDownError` if the semaphore is unavailable:
+Values can never become negative. `down()` waits until the value can be decremented. `downNow()` instead rejects with a `SemaphoreDownError` if the value cannot be decremented immediately.
 
-```js
-try {
-    await semaphore.downNow();
-} catch (error) {
-    // error instanceof SemaphoreDownError
-    // error.name === 'SemaphoreDownError'
-    // error.semaphoreId === 'my-semaphore'
-    // error.amount === 1
-}
-```
-
-`@ava/cooperate`'s semaphores are _weighted_. `down()`, `up()`, and `downNow()` accept a non-negative amount, defaulting to 1, by which to modify the semaphore:
+Semaphores are _weighted_. `down()`, `downNow()` and `up()` accept a non-negative amount, defaulting to `1`, by which to decrement or increment the value:
 
 ```js
 await semaphore.down(0);
+await semaphore.downNow(2);
 await semaphore.up(1);
-try {
-    await semaphore.downNow(2);
-} catch (error) {
-    // ...
-}
 ```
 
-`down()` callers are woken in FIFO order. If the semaphore has 1 unit available and the first waiter is requesting 2 units, it will block other waiters, even if they are requesting only 1 or 0 units.
+`down()` decrements in FIFO order. If the current value is `1`, and the first call tries to decrement with `2`, other calls have to wait until an increment, even if they want to decrement with just `1`.
 
-`downNow()` skips the queue and takes the requested amount if possible.
+`downNow()` however skips the queue and decrements if possible.
 
-Unlike `Lock`, `Semaphore`s do not release the "acquired" amount when a test worker exits. When using a semaphore to model acquisitions from a resource pool, it's good practice to call `up()` in a `finally` block:
+These `CountingSemaphore`s do not release the "acquired" amount when a test worker exits. When using a semaphore to model acquisitions from a resource pool, it's good practice to call `up()` in a `finally` block:
 
 ```js
 await semaphore.down(amount);
