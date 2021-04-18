@@ -2,7 +2,7 @@ import path from 'path';
 import {registerSharedWorker} from 'ava/plugin';
 import never from 'never';
 
-import {Data, MessageType} from './types';
+import {Data, MessageType, SemaphoreCreationFailed} from './types';
 
 const protocol = registerSharedWorker<Data>({
 	filename: path.join(__dirname, 'worker.js'),
@@ -85,7 +85,8 @@ export class Semaphore {
 	constructor(
 		context: SharedContext,
 		public readonly id: string,
-		public readonly initialValue: number
+		public readonly initialValue: number,
+		public readonly autoRelease: boolean
 	) {
 		this.#context = context;
 
@@ -102,13 +103,7 @@ export class Semaphore {
 		// Allow down() to be called before the shared worker is availabe.
 		await protocol.available;
 
-		return downSemaphore({
-			amount,
-			contextId: this.#context.id,
-			semaphore: this,
-			wait: true,
-			autoRelease: false
-		});
+		return downSemaphore(this, this.#context.id, amount, true);
 	}
 
 	async downNow(amount = 1) {
@@ -119,13 +114,7 @@ export class Semaphore {
 		// Down immediately, which will fail if the protocol is not available.
 		// "Now" should not mean "wait until we're ready."
 
-		return downSemaphore({
-			amount,
-			contextId: this.#context.id,
-			semaphore: this,
-			wait: false,
-			autoRelease: false
-		});
+		return downSemaphore(this, this.#context.id, amount, false);
 	}
 
 	async up(amount = 1) {
@@ -136,11 +125,10 @@ export class Semaphore {
 		// Allow up() to be called before the shared worker is availabe.
 		await protocol.available;
 
-		const {id, initialValue} = this;
 		const message = protocol.publish({
 			type: MessageType.SEMAPHORE_UP,
 			contextId: this.#context.id,
-			semaphore: {id, initialValue},
+			semaphore: this,
 			amount
 		});
 
@@ -150,7 +138,7 @@ export class Semaphore {
 			}
 
 			if (reply.data.type === MessageType.SEMAPHORE_CREATION_FAILED) {
-				throw new SemaphoreCreationError(id, initialValue, reply.data.initialValue);
+				throw new SemaphoreCreationError(this, reply.data);
 			}
 		}
 
@@ -158,63 +146,25 @@ export class Semaphore {
 		// The above loop will never actually break if the resources are not acquired.
 		return never();
 	}
-
-	async acquire(amount = 1): Promise<() => void> {
-		return downSemaphore({
-			amount,
-			contextId: this.#context.id,
-			semaphore: this,
-			wait: true,
-			autoRelease: true
-		});
-	}
-
-	async acquireNow(amount = 1): Promise<() => void> {
-		return downSemaphore({
-			amount,
-			contextId: this.#context.id,
-			semaphore: this,
-			wait: false,
-			autoRelease: true
-		});
-	}
 }
 
-type DownSemaphoreOptions<AutoRelease extends boolean = boolean> = {
-	amount: number;
-	wait: boolean;
-	autoRelease: AutoRelease;
-	contextId: string;
-	semaphore: {
-		id: string;
-		initialValue: number;
-	};
-};
-async function downSemaphore(options: DownSemaphoreOptions<false>): Promise<void>;
-async function downSemaphore(options: DownSemaphoreOptions<true>): Promise<() => void>;
-async function downSemaphore(options: DownSemaphoreOptions): Promise<void | (() => void)> {
-	const {amount, wait, autoRelease, semaphore: {id, initialValue}, contextId} = options;
-
+async function downSemaphore(semaphore: Semaphore, contextId: string, amount: number, wait: boolean): Promise<() => void> {
+	const {autoRelease, id, initialValue} = semaphore;
 	const message = protocol.publish({
 		type: MessageType.SEMAPHORE_DOWN,
+		contextId,
+		semaphore: {autoRelease, id, initialValue},
 		amount,
-		wait,
-		autoRelease,
-		semaphore: {id, initialValue},
-		contextId
+		wait
 	});
 
 	for await (const reply of message.replies()) {
 		if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
-			if (autoRelease) {
-				return () => {
-					reply.reply({
-						type: MessageType.SEMAPHORE_RELEASE
-					});
-				};
-			}
-
-			return;
+			return () => {
+				reply.reply({
+					type: MessageType.SEMAPHORE_RELEASE
+				});
+			};
 		}
 
 		if (reply.data.type === MessageType.SEMAPHORE_FAILED) {
@@ -222,7 +172,7 @@ async function downSemaphore(options: DownSemaphoreOptions): Promise<void | (() 
 		}
 
 		if (reply.data.type === MessageType.SEMAPHORE_CREATION_FAILED) {
-			throw new SemaphoreCreationError(id, initialValue, reply.data.initialValue);
+			throw new SemaphoreCreationError(semaphore, reply.data);
 		}
 	}
 
@@ -242,16 +192,15 @@ export class SemaphoreDownError extends Error {
 }
 
 export class SemaphoreCreationError extends Error {
+	readonly semaphoreId: string;
+
 	get name() {
 		return 'SempahoreCreationError';
 	}
 
-	constructor(
-		public readonly semaphoreId: string,
-		triedInitialValue: number,
-		actualInitialValue: number
-	) {
-		super(`Failed to create semaphore: expected initial value ${actualInitialValue}, got ${triedInitialValue}`);
+	constructor(semaphore: Semaphore, {autoRelease, initialValue}: SemaphoreCreationFailed) {
+		super(`Failed to create semaphore: expected initial value ${semaphore.initialValue} (got ${initialValue}) and auto-release ${String(semaphore.autoRelease)} (got ${String(autoRelease)})`);
+		this.semaphoreId = semaphore.id;
 	}
 }
 
@@ -262,8 +211,8 @@ export class SharedContext {
 		return new Lock(this, id);
 	}
 
-	createSemaphore(id: string, initialValue: number): Semaphore {
-		return new Semaphore(this, id, initialValue);
+	createSemaphore(id: string, {autoRelease = true, initialValue = 0}: {autoRelease?: boolean; initialValue?: number} = {}): Semaphore {
+		return new Semaphore(this, id, initialValue, autoRelease);
 	}
 
 	async reserve<T extends bigint | number | string>(...values: T[]): Promise<T[]> {

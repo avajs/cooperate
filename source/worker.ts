@@ -149,7 +149,7 @@ class Semaphore {
 	public value: number;
 	public queue: Array<{id: string; amount: number; resolve: () => void}>;
 
-	constructor(public readonly initialValue: number) {
+	constructor(public readonly initialValue: number, public readonly autoRelease: boolean) {
 		this.value = initialValue;
 		this.queue = [];
 	}
@@ -192,22 +192,29 @@ class Semaphore {
 	}
 }
 
-function getSemaphore(contextId: string, id: string, initialValue: number): Semaphore {
+function getSemaphore(contextId: string, id: string, initialValue: number, autoRelease: boolean): [ok: boolean, semaphore: Semaphore] {
 	const context = getContext(contextId);
-	const semaphore = context.semaphores.get(id) ?? new Semaphore(initialValue);
+	let semaphore = context.semaphores.get(id);
+
+	if (semaphore !== undefined) {
+		return [semaphore.initialValue === initialValue && semaphore.autoRelease === autoRelease, semaphore];
+	}
+
+	semaphore = new Semaphore(initialValue, autoRelease);
 	context.semaphores.set(id, semaphore);
-	return semaphore;
+	return [true, semaphore];
 }
 
 async function downSemaphore(
 	message: ReceivedMessage,
-	{contextId, semaphore: {id, initialValue}, amount, wait, autoRelease}: SemaphoreDown
+	{contextId, semaphore: {autoRelease, id, initialValue}, amount, wait}: SemaphoreDown
 ): Promise<void> {
-	const semaphore = getSemaphore(contextId, id, initialValue);
-	if (semaphore.initialValue !== initialValue) {
+	const [ok, semaphore] = getSemaphore(contextId, id, initialValue, autoRelease);
+	if (!ok) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
-			initialValue: semaphore.initialValue
+			initialValue: semaphore.initialValue,
+			autoRelease: semaphore.autoRelease
 		});
 		return;
 	}
@@ -235,12 +242,10 @@ async function downSemaphore(
 			type: MessageType.SEMAPHORE_SUCCEEDED
 		});
 
-		if (autoRelease) {
-			for await (const {data} of reply.replies()) {
-				if (data.type === MessageType.SEMAPHORE_RELEASE) {
-					release();
-					break;
-				}
+		for await (const {data} of reply.replies()) {
+			if (data.type === MessageType.SEMAPHORE_RELEASE) {
+				release();
+				break;
 			}
 		}
 
@@ -248,20 +253,19 @@ async function downSemaphore(
 	}
 
 	if (semaphore.tryDown(amount)) {
+		let release = () => semaphore.up(amount);
+		if (autoRelease) {
+			release = message.testWorker.teardown(release);
+		}
+
 		const reply = message.reply({
 			type: MessageType.SEMAPHORE_SUCCEEDED
 		});
 
-		if (autoRelease) {
-			const release = message.testWorker.teardown(() => {
-				semaphore.up(amount);
-			});
-
-			for await (const {data} of reply.replies()) {
-				if (data.type === MessageType.SEMAPHORE_RELEASE) {
-					release();
-					break;
-				}
+		for await (const {data} of reply.replies()) {
+			if (data.type === MessageType.SEMAPHORE_RELEASE) {
+				release();
+				break;
 			}
 		}
 	} else {
@@ -273,13 +277,14 @@ async function downSemaphore(
 
 function upSemaphore(
 	message: ReceivedMessage,
-	{contextId, semaphore: {id, initialValue}, amount}: SemaphoreUp
+	{contextId, semaphore: {autoRelease, id, initialValue}, amount}: SemaphoreUp
 ) {
-	const semaphore = getSemaphore(contextId, id, initialValue);
-	if (semaphore.initialValue !== initialValue) {
+	const [ok, semaphore] = getSemaphore(contextId, id, initialValue, autoRelease);
+	if (!ok) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
-			initialValue: semaphore.initialValue
+			initialValue: semaphore.initialValue,
+			autoRelease: semaphore.autoRelease
 		});
 		return;
 	}

@@ -39,7 +39,8 @@ export type ReservedIndexes = {
 	indexes: number[];
 };
 
-type SemaphoreData = {
+type SemaphoreSetup = {
+	autoRelease: boolean;
 	id: string;
 	initialValue: number;
 };
@@ -47,16 +48,15 @@ type SemaphoreData = {
 export type SemaphoreDown = {
 	type: MessageType.SEMAPHORE_DOWN;
 	contextId: string;
-	semaphore: SemaphoreData;
+	semaphore: SemaphoreSetup;
 	amount: number;
 	wait: boolean;
-	autoRelease: boolean;
 };
 
 export type SemaphoreUp = {
 	type: MessageType.SEMAPHORE_UP;
 	contextId: string;
-	semaphore: SemaphoreData;
+	semaphore: SemaphoreSetup;
 	amount: number;
 };
 
@@ -70,6 +70,7 @@ export type SemaphoreResult = {
 
 export type SemaphoreCreationFailed = {
 	type: MessageType.SEMAPHORE_CREATION_FAILED;
+	autoRelease: boolean;
 	initialValue: number;
 };
 
