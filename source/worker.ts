@@ -201,7 +201,7 @@ function getSemaphore(contextId: string, id: string, initialValue: number): Sema
 
 async function downSemaphore(
 	message: ReceivedMessage,
-	{contextId, semaphore: {id, initialValue}, amount, wait, track}: SemaphoreDown
+	{contextId, semaphore: {id, initialValue}, amount, wait, autoRelease}: SemaphoreDown
 ): Promise<void> {
 	const semaphore = getSemaphore(contextId, id, initialValue);
 	if (semaphore.initialValue !== initialValue) {
@@ -215,10 +215,12 @@ async function downSemaphore(
 	if (wait) {
 		let acquired = false;
 
-		const release = track && message.testWorker.teardown(() => {
-			if (acquired) {
+		const release = message.testWorker.teardown(() => {
+			if (acquired && autoRelease) {
 				semaphore.up(amount);
-			} else {
+			}
+
+			if (!acquired) {
 				// The waiter will never be woken, but that's fine since the test
 				// worker's already exited.
 				semaphore.queue = semaphore.queue.filter(({id}) => id !== message.id);
@@ -233,7 +235,7 @@ async function downSemaphore(
 			type: MessageType.SEMAPHORE_SUCCEEDED
 		});
 
-		if (release) {
+		if (autoRelease) {
 			for await (const {data} of reply.replies()) {
 				if (data.type === MessageType.SEMAPHORE_RELEASE) {
 					release();
@@ -250,7 +252,7 @@ async function downSemaphore(
 			type: MessageType.SEMAPHORE_SUCCEEDED
 		});
 
-		if (track) {
+		if (autoRelease) {
 			const release = message.testWorker.teardown(() => {
 				semaphore.up(amount);
 			});

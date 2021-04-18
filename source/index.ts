@@ -107,7 +107,7 @@ export class Semaphore {
 			contextId: this.#context.id,
 			semaphore: this,
 			wait: true,
-			track: false
+			autoRelease: false
 		});
 	}
 
@@ -124,7 +124,7 @@ export class Semaphore {
 			contextId: this.#context.id,
 			semaphore: this,
 			wait: false,
-			track: false
+			autoRelease: false
 		});
 	}
 
@@ -165,7 +165,7 @@ export class Semaphore {
 			contextId: this.#context.id,
 			semaphore: this,
 			wait: true,
-			track: true
+			autoRelease: true
 		});
 	}
 
@@ -175,42 +175,46 @@ export class Semaphore {
 			contextId: this.#context.id,
 			semaphore: this,
 			wait: false,
-			track: true
+			autoRelease: true
 		});
 	}
 }
 
-type DownSemaphoreOptions = {
+type DownSemaphoreOptions<AutoRelease extends boolean = boolean> = {
 	amount: number;
 	wait: boolean;
-	track: boolean;
+	autoRelease: AutoRelease;
 	contextId: string;
 	semaphore: {
 		id: string;
 		initialValue: number;
 	};
 };
-async function downSemaphore(options: DownSemaphoreOptions & {track: false}): Promise<void>;
-async function downSemaphore(options: DownSemaphoreOptions & {track: true}): Promise<() => void>;
-async function downSemaphore(options: DownSemaphoreOptions & {track: boolean}): Promise<void | (() => void)> {
-	const {amount, wait, track, semaphore: {id, initialValue}, contextId} = options;
+async function downSemaphore(options: DownSemaphoreOptions<false>): Promise<void>;
+async function downSemaphore(options: DownSemaphoreOptions<true>): Promise<() => void>;
+async function downSemaphore(options: DownSemaphoreOptions): Promise<void | (() => void)> {
+	const {amount, wait, autoRelease, semaphore: {id, initialValue}, contextId} = options;
 
 	const message = protocol.publish({
 		type: MessageType.SEMAPHORE_DOWN,
 		amount,
 		wait,
-		track,
+		autoRelease,
 		semaphore: {id, initialValue},
 		contextId
 	});
 
 	for await (const reply of message.replies()) {
 		if (reply.data.type === MessageType.SEMAPHORE_SUCCEEDED) {
-			return track ? () => {
-				reply.reply({
-					type: MessageType.SEMAPHORE_RELEASE
-				});
-			} : undefined;
+			if (autoRelease) {
+				return () => {
+					reply.reply({
+						type: MessageType.SEMAPHORE_RELEASE
+					});
+				};
+			}
+
+			return;
 		}
 
 		if (reply.data.type === MessageType.SEMAPHORE_FAILED) {

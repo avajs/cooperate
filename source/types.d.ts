@@ -50,7 +50,7 @@ export type SemaphoreDown = {
 	semaphore: SemaphoreData;
 	amount: number;
 	wait: boolean;
-	track: boolean;
+	autoRelease: boolean;
 };
 
 export type SemaphoreUp = {
