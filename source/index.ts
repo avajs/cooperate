@@ -90,11 +90,15 @@ export class Semaphore {
 		this.#context = context;
 
 		if (initialValue < 0) {
-			throw new RangeError('initialValue must be nonnegative');
+			throw new RangeError('initialValue must be non-negative');
 		}
 	}
 
 	async down(amount = 1) {
+		if (amount < 0) {
+			throw new RangeError('amount must be non-negative');
+		}
+
 		return downSemaphore({
 			amount,
 			contextId: this.#context.id,
@@ -105,6 +109,10 @@ export class Semaphore {
 	}
 
 	async downNow(amount = 1) {
+		if (amount < 0) {
+			throw new RangeError('amount must be non-negative');
+		}
+
 		return downSemaphore({
 			amount,
 			contextId: this.#context.id,
@@ -116,7 +124,7 @@ export class Semaphore {
 
 	async up(amount = 1) {
 		if (amount < 0) {
-			throw new RangeError('amount must be nonnegative');
+			throw new RangeError('amount must be non-negative');
 		}
 
 		await protocol.available;
@@ -179,10 +187,6 @@ async function downSemaphore(options: DownSemaphoreOptions & {track: false}): Pr
 async function downSemaphore(options: DownSemaphoreOptions & {track: true}): Promise<() => void>;
 async function downSemaphore(options: DownSemaphoreOptions & {track: boolean}): Promise<void | (() => void)> {
 	const {amount, wait, track, semaphore: {id, initialValue}, contextId} = options;
-
-	if (amount < 0) {
-		throw new RangeError('amount must be nonnegative');
-	}
 
 	if (wait) {
 		await protocol.available;
