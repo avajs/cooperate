@@ -171,7 +171,7 @@ class Semaphore {
 			});
 		}
 
-		callback?.();
+		callback();
 	}
 
 	tryDown(amount: number): boolean {
