@@ -219,9 +219,9 @@ async function downSemaphore(
 		return;
 	}
 
-	if (wait) {
-		let acquired = 0;
+	let acquired = 0;
 
+	if (wait) {
 		const release = message.testWorker.teardown((clearQueue = true) => {
 			if (acquired > 0 && autoRelease) {
 				semaphore.up(acquired);
@@ -245,10 +245,9 @@ async function downSemaphore(
 		if (autoRelease) {
 			for await (const {data} of reply.replies()) {
 				if (data.type === MessageType.SEMAPHORE_RELEASE) {
-					if (acquired > 0) { // eslint-disable-line max-depth
-						semaphore.up(Math.min(acquired, data.amount));
-						acquired -= data.amount;
-					}
+					const releaseAmount = Math.min(acquired, data.amount);
+					semaphore.up(releaseAmount);
+					acquired -= releaseAmount;
 
 					if (acquired <= 0) { // eslint-disable-line max-depth
 						release(false);
@@ -262,21 +261,24 @@ async function downSemaphore(
 	}
 
 	if (semaphore.tryDown(amount)) {
+		acquired = amount;
+
 		const reply = message.reply({
 			type: MessageType.SEMAPHORE_SUCCEEDED
 		});
 
 		if (autoRelease) {
-			const release = message.testWorker.teardown(() => semaphore.up(amount));
+			const release = message.testWorker.teardown(() => semaphore.up(acquired));
 			for await (const {data} of reply.replies()) {
 				if (data.type === MessageType.SEMAPHORE_RELEASE) {
-					semaphore.up(Math.min(amount, data.amount));
-					amount = Math.max(0, amount - data.amount);
-					if (amount === 0) { // eslint-disable-line max-depth
-						release(); // Remove teardown hook.
-					}
+					const releaseAmount = Math.min(acquired, data.amount);
+					semaphore.up(releaseAmount);
+					acquired -= releaseAmount;
 
-					break;
+					if (acquired <= 0) { // eslint-disable-line max-depth
+						release(); // Remove teardown hook.
+						break;
+					}
 				}
 			}
 		}
