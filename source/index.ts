@@ -276,11 +276,11 @@ export class SharedContext {
 		return new Lock(this, id);
 	}
 
-	createSemaphore(id: string, initialValue = 0): AcquiringSemaphore {
+	createSemaphore(id: string, initialValue: number): AcquiringSemaphore {
 		return new AcquiringSemaphore(this, id, initialValue);
 	}
 
-	createCountingSemaphore(id: string, initialValue = 0): CountingSemaphore {
+	createCountingSemaphore(id: string, initialValue: number): CountingSemaphore {
 		return new CountingSemaphore(this, id, initialValue);
 	}
 
