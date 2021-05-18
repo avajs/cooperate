@@ -1,4 +1,4 @@
-import test from 'ava';
+import test, {ExecutionContext} from 'ava';
 import {SharedContext, SemaphoreCreationError, SemaphoreDownError, CountingSemaphore, AcquiringSemaphore} from '../source';
 import synchronize from './_synchronize';
 
@@ -170,4 +170,55 @@ test('semaphore is cleaned up when a test worker exits', async t => {
 
 	// Try to acquire the semaphore
 	await t.notThrowsAsync(semaphore.acquireNow());
+});
+
+type Acquirer = AcquiringSemaphore['acquire'];
+
+async function testPartialRelease(t: ExecutionContext, acquire: Acquirer) {
+	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 3);
+	const release = await acquire.call(semaphore, 3);
+	t.is(await probeAutoRelease(semaphore), 0);
+	release(1);
+	t.is(await probeAutoRelease(semaphore), 1);
+	release(2);
+	t.is(await probeAutoRelease(semaphore), 3);
+}
+
+testPartialRelease.title = (provided: string, acquire: Acquirer) => `${provided || `${acquire.name}()`} acquisitions can be partially released`;
+
+test(testPartialRelease, AcquiringSemaphore.prototype.acquire);
+test(testPartialRelease, AcquiringSemaphore.prototype.acquireNow);
+
+async function overRelease(t: ExecutionContext, acquire: Acquirer) {
+	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
+	const release = await acquire.call(semaphore, 2);
+	t.throws(() => release(3), {
+		instanceOf: RangeError
+	});
+}
+
+overRelease.title = (provided: string, acquire: Acquirer) =>
+	`${provided || `${acquire.name}()`} can't release more than the acquired amount`;
+
+test(overRelease, AcquiringSemaphore.prototype.acquire);
+test(overRelease, AcquiringSemaphore.prototype.acquireNow);
+
+async function overReleaseRemaining(t: ExecutionContext, acquire: Acquirer) {
+	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
+	const release = await acquire.call(semaphore, 3);
+	release(2);
+	t.throws(() => release(2));
+}
+
+overReleaseRemaining.title = (provided: string, acquire: Acquirer) =>
+	`${provided || `${acquire.name}()`} can't release more than the remaining amount`;
+
+test(overReleaseRemaining, AcquiringSemaphore.prototype.acquire);
+test(overReleaseRemaining, AcquiringSemaphore.prototype.acquireNow);
+
+test('can always release zero', async t => {
+	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
+	const release = await semaphore.acquire(1);
+	release(1);
+	t.notThrows(() => release(0));
 });
