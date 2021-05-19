@@ -215,11 +215,17 @@ test('semaphore is cleaned up when a test worker exits', async t => {
 	});
 	const semaphore = context.createSemaphore(t.title, 1);
 
-	// Wait for them to exit
-	await theirs.acquire();
+	// Wait for them to acquire the semaphore
+	const releaseTheirs = await theirs.acquire();
 
 	// Try to acquire the semaphore
-	await t.notThrowsAsync(semaphore.acquireNow());
+	const releaseSemaphorePromise = semaphore.acquire();
+
+	// Signal them to exit
+	releaseTheirs();
+
+	// Check that we succeed in acquiring the semaphore
+	await t.notThrowsAsync(releaseSemaphorePromise);
 });
 
 type Acquirer = AcquiringSemaphore['acquire'];

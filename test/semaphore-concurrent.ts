@@ -22,7 +22,7 @@ test('attempt to acquire() semaphore concurrently in different processes', async
 });
 
 test('semaphore is cleaned up when a test worker exits', async t => {
-	const {context} = await synchronize({
+	const {context, ours, release: releaseOurs} = await synchronize({
 		context: new SharedContext(t.title),
 		ours: 'torn down',
 		theirs: 'unused'
@@ -35,6 +35,12 @@ test('semaphore is cleaned up when a test worker exits', async t => {
 	void semaphore.acquire();
 	void semaphore.acquire();
 
-	// Our lock will be released when we exit
+	// Signal them to try
+	releaseOurs();
+
+	// Wait for them to try
+	await ours.acquire();
+
+	// Lock & semaphore will be released when we exit
 	t.pass();
 });
