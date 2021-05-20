@@ -151,7 +151,7 @@ class Semaphore {
 	public value: number;
 	public queue: Array<{id: string; amount: number; resolve: () => void}>;
 
-	constructor(public readonly initialValue: number, public readonly autoRelease: boolean) {
+	constructor(public readonly initialValue: number) {
 		this.value = initialValue;
 		this.queue = [];
 	}
@@ -203,7 +203,7 @@ function getSemaphore(contextId: string, id: string, initialValue: number, autoR
 		return [semaphore.initialValue === initialValue, semaphore];
 	}
 
-	semaphore = new Semaphore(initialValue, autoRelease);
+	semaphore = new Semaphore(initialValue);
 	semaphores.set(id, semaphore);
 	return [true, semaphore];
 }
@@ -216,8 +216,7 @@ async function downSemaphore(
 	if (!ok) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
-			initialValue: semaphore.initialValue,
-			autoRelease: semaphore.autoRelease
+			initialValue: semaphore.initialValue
 		});
 		return;
 	}
@@ -300,8 +299,7 @@ function upSemaphore(
 	if (!ok) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
-			initialValue: semaphore.initialValue,
-			autoRelease: semaphore.autoRelease
+			initialValue: semaphore.initialValue
 		});
 		return;
 	}

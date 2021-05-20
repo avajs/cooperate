@@ -71,7 +71,6 @@ export type SemaphoreResult = {
 
 export type SemaphoreCreationFailed = {
 	type: MessageType.SEMAPHORE_CREATION_FAILED;
-	autoRelease: boolean;
 	initialValue: number;
 };
 
