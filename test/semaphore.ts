@@ -278,3 +278,11 @@ test('can always release zero', async t => {
 	release(1);
 	t.notThrows(() => release(0));
 });
+
+test('counting and acquiring semaphores can\'t collide', async t => {
+	const context = new SharedContext(test.meta.file);
+	const acquiring = context.createSemaphore(t.title, 2);
+	const counting = context.createCountingSemaphore(t.title, 3);
+	t.is(await probeAutoRelease(acquiring), 2);
+	t.is(await probeManualRelease(counting), 3);
+});
