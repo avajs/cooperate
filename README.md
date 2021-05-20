@@ -87,59 +87,61 @@ const reserved = await context.reserve(1, 2, 3);
 You can create a [counting semaphore](https://www.guru99.com/semaphore-in-operating-system.html) within a shared context:
 
 ```js
-const initialValue = 3; // Must be non-negative. Defaults to 0 if not provided.
+const initialValue = 3; // Must be non-negative.
 const semaphore = context.createSemaphore('my-semaphore', initialValue);
 ```
 
-Within the same context, semaphores with the same ID must be created with the same initial value. Semaphores created later, with a different value, are unusable. Their methods will reject with a `SemaphoreCreationError`.
+Within the same context, semaphores with the same ID must be created with the same initial value. Semaphores created with a different value are unusable. Their methods will reject with a `SemaphoreCreationError`.
 
-These semaphores have two methods: `acquire()` and `acquireNow()`:
+Semaphores have two methods: `acquire()` and `acquireNow()`. Use `acquire()` to decrement the semaphore's value. If the semaphore's value would become negative, instead `acquire()` waits until the semaphore's value is high enough.
 
-TODO: Explain counting behavior (decrements from initial value)
-TODO: Should acquireNow() throw a different error? Or find a more generic name?
-TODO: Explain release function, with partial increment
-TODO: Explain auto-release
+```js
+const semaphore = context.createSemaphore('my-semaphore', 3);
+const release = await semaphore.acquire();
+```
+
+`acquire()` returns a function, `release()`, which increments the semaphore's value by the same amount as was acquired.
+
+If you don't call `release()`, it'll be run automatically when the test worker exits. Any pending `acquire()` calls will also be removed from the queue at this time.
+
+`acquireNow()` works like `acquire()`, except that if the semaphore can't be decremented immediately, `acquireNow()` rejects with a `SemaphoreDownError` rather than wait.
+
+Semaphores are _weighted_. `acquire()` and `acquireNow()` accept a non-negative amount, defaulting to `1`, by which to decrement or increment the value:
+
+```js
+await semaphore.acquire(0);
+await semaphore.acquireNow(2);
+```
+
+You can also pass an amount to `release()` to release just part of the acquisition at a time:
+
+```js
+const release = await semaphore.acquire(3); // Decrements the semaphore by 3
+release(1); // Increments the semaphore by 1
+release(); // Increments the semaphore by the remaining 2
+```
+
+`acquire()` calls resolve in FIFO order. If the current value is `1`, and a call tries to acquire `2`, subsequent `acquire()` calls have to wait, even if they want to acquire just `1`.
+
+`acquireNow()` skips the queue and decrements immediately if possible.
 
 #### Lower-level counting semaphores
 
 You can create a lower-level counting semaphore which doesn't have any auto-release behavior. Instead you need to increment the semaphore in code.
 
 ```js
-const initialValue = 3; // Must be non-negative. Defaults to 0 if not provided.
+const initialValue = 3; // Must be non-negative.
 const semaphore = context.createCountingSemaphore('my-semaphore', initialValue);
 ```
-
-TODO: Initial-value rules apply. The same semaphore may be instantiated differently
-TODO: But the code inherits auto-release behavior from the first creation, instead of in the DOWN message
 
 These semaphores have three methods. `down()` and `downNow()` decrement the value and `up()` increments:
 
 ```js
-await semaphore.down();
-await semaphore.up();
-```
-
-Values can never become negative. `down()` waits until the value can be decremented. `downNow()` instead rejects with a `SemaphoreDownError` if the value cannot be decremented immediately.
-
-Semaphores are _weighted_. `down()`, `downNow()` and `up()` accept a non-negative amount, defaulting to `1`, by which to decrement or increment the value:
-
-```js
 await semaphore.down(0);
 await semaphore.downNow(2);
-await semaphore.up(1);
+await semaphore.up(); // `amount` defaults to 1
 ```
 
-`down()` decrements in FIFO order. If the current value is `1`, and the first call tries to decrement with `2`, other calls have to wait until an increment, even if they want to decrement with just `1`.
+Like `acquire()` and `acquireNow()`, `down()` waits for the semaphore's value to be at least the requested amount, while `downNow()` rejects with `SemaphoreDownError` if the value cannot be decremented immediately.
 
-`downNow()` however skips the queue and decrements if possible.
-
-These `CountingSemaphore`s do not release the "acquired" amount when a test worker exits. When using a semaphore to model acquisitions from a resource pool, it's good practice to call `up()` in a `finally` block:
-
-```js
-await semaphore.down(amount);
-try {
-    return await doWork();
-} finally {
-    await semaphore.up(amount);
-}
-```
+These `CountingSemaphore`s do not release the "acquired" amount when a test worker exits.
