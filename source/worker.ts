@@ -34,7 +34,8 @@ export default factory;
 type Context = {
 	locks: Map<string, {holderId: string; waiting: Array<{ holderId: string; notify: () => void }>}>;
 	reservedValues: Set<bigint | number | string>;
-	semaphores: Map<string, Semaphore>;
+	acquiringSemaphores: Map<string, Semaphore>;
+	countingSemaphores: Map<string, Semaphore>;
 };
 
 const sharedContexts = new Map<string, Context>();
@@ -43,7 +44,8 @@ function getContext(id: string): Context {
 	const context = sharedContexts.get(id) ?? {
 		locks: new Map(),
 		reservedValues: new Set(),
-		semaphores: new Map()
+		acquiringSemaphores: new Map(),
+		countingSemaphores: new Map()
 	};
 	sharedContexts.set(id, context);
 	return context;
@@ -194,14 +196,15 @@ class Semaphore {
 
 function getSemaphore(contextId: string, id: string, initialValue: number, autoRelease: boolean): [ok: boolean, semaphore: Semaphore] {
 	const context = getContext(contextId);
-	let semaphore = context.semaphores.get(id);
+	const semaphores = (autoRelease ? context.acquiringSemaphores : context.countingSemaphores);
+	let semaphore = semaphores.get(id);
 
 	if (semaphore !== undefined) {
 		return [semaphore.initialValue === initialValue, semaphore];
 	}
 
 	semaphore = new Semaphore(initialValue, autoRelease);
-	context.semaphores.set(id, semaphore);
+	semaphores.set(id, semaphore);
 	return [true, semaphore];
 }
 
