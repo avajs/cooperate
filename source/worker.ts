@@ -229,9 +229,10 @@ async function downSemaphore(
 	}
 
 	let acquired = 0;
+	let release;
 
 	if (wait) {
-		const release = message.testWorker.teardown((clearQueue = true) => {
+		release = message.testWorker.teardown((clearQueue = true) => {
 			if (acquired > 0 && autoRelease) {
 				semaphore.up(acquired);
 			}
@@ -246,55 +247,35 @@ async function downSemaphore(
 		await semaphore.down(amount, message.id, () => {
 			acquired = amount;
 		});
-
-		const reply = message.reply({
-			type: MessageType.SEMAPHORE_SUCCEEDED
-		});
-
-		if (autoRelease) {
-			for await (const {data} of reply.replies()) {
-				if (data.type === MessageType.SEMAPHORE_RELEASE) {
-					const releaseAmount = Math.min(acquired, data.amount);
-					semaphore.up(releaseAmount);
-					acquired -= releaseAmount;
-
-					if (acquired <= 0) { // eslint-disable-line max-depth
-						release(false);
-						break;
-					}
-				}
-			}
-		}
-
-		return;
-	}
-
-	if (semaphore.tryDown(amount)) {
+	} else if (semaphore.tryDown(amount)) {
 		acquired = amount;
 
-		const reply = message.reply({
-			type: MessageType.SEMAPHORE_SUCCEEDED
-		});
-
-		if (autoRelease) {
-			const release = message.testWorker.teardown(() => semaphore.up(acquired));
-			for await (const {data} of reply.replies()) {
-				if (data.type === MessageType.SEMAPHORE_RELEASE) {
-					const releaseAmount = Math.min(acquired, data.amount);
-					semaphore.up(releaseAmount);
-					acquired -= releaseAmount;
-
-					if (acquired <= 0) { // eslint-disable-line max-depth
-						release(); // Remove teardown hook.
-						break;
-					}
-				}
-			}
-		}
+		release = message.testWorker.teardown(() => semaphore.up(acquired));
 	} else {
 		message.reply({
 			type: MessageType.SEMAPHORE_FAILED
 		});
+
+		return;
+	}
+
+	const reply = message.reply({
+		type: MessageType.SEMAPHORE_SUCCEEDED
+	});
+
+	if (autoRelease) {
+		for await (const {data} of reply.replies()) {
+			if (data.type === MessageType.SEMAPHORE_RELEASE) {
+				const releaseAmount = Math.min(acquired, data.amount);
+				semaphore.up(releaseAmount);
+				acquired -= releaseAmount;
+
+				if (acquired <= 0) {
+					release(false);
+					break;
+				}
+			}
+		}
 	}
 }
 
