@@ -109,7 +109,7 @@ export class AcquiringSemaphore extends Semaphore_ {
 			throw new RangeError('amount must be non-negative');
 		}
 
-		// Allow down() to be called before the shared worker is availabe.
+		// Allow acquire() to be called before the shared worker is availabe.
 		await protocol.available;
 
 		const reply = await downSemaphore(this, this.#context.id, amount, true);

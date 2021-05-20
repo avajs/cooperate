@@ -194,9 +194,16 @@ class Semaphore {
 	}
 }
 
-function getSemaphore(contextId: string, id: string, initialValue: number, autoRelease: boolean): [ok: boolean, semaphore: Semaphore] {
+function getSemaphore(
+	contextId: string,
+	id: string,
+	initialValue: number,
+	autoRelease: boolean
+): [ok: boolean, semaphore: Semaphore] {
 	const context = getContext(contextId);
-	const semaphores = (autoRelease ? context.acquiringSemaphores : context.countingSemaphores);
+	const semaphores = autoRelease ?
+		context.acquiringSemaphores :
+		context.countingSemaphores;
 	let semaphore = semaphores.get(id);
 
 	if (semaphore !== undefined) {
