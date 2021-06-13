@@ -72,6 +72,7 @@ export type SemaphoreResult = {
 export type SemaphoreCreationFailed = {
 	type: MessageType.SEMAPHORE_CREATION_FAILED;
 	initialValue: number;
+	managed: boolean;
 };
 
 export type Data =

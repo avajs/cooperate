@@ -81,18 +81,7 @@ export class LockAcquisitionError extends Error {
 	}
 }
 
-class Semaphore {
-	constructor(
-		public readonly id: string,
-		public readonly initialValue: number
-	) {
-		if (initialValue < 0) {
-			throw new RangeError('initialValue must be non-negative');
-		}
-	}
-}
-
-export class ManagedSemaphore extends Semaphore {
+export class ManagedSemaphore {
 	readonly #context: SharedContext;
 
 	constructor(
@@ -100,7 +89,10 @@ export class ManagedSemaphore extends Semaphore {
 		public readonly id: string,
 		public readonly initialValue: number
 	) {
-		super(id, initialValue);
+		if (initialValue < 0) {
+			throw new RangeError('initialValue must be non-negative');
+		}
+
 		this.#context = context;
 	}
 
@@ -149,7 +141,7 @@ export class ManagedSemaphore extends Semaphore {
 	}
 }
 
-export class UnmanagedSemaphore extends Semaphore {
+export class UnmanagedSemaphore {
 	readonly #context: SharedContext;
 
 	constructor(
@@ -157,7 +149,10 @@ export class UnmanagedSemaphore extends Semaphore {
 		public readonly id: string,
 		public readonly initialValue: number
 	) {
-		super(id, initialValue);
+		if (initialValue < 0) {
+			throw new RangeError('initialValue must be non-negative');
+		}
+
 		this.#context = context;
 	}
 
@@ -215,6 +210,8 @@ export class UnmanagedSemaphore extends Semaphore {
 	}
 }
 
+type Semaphore = ManagedSemaphore | UnmanagedSemaphore;
+
 async function downSemaphore(semaphore: Semaphore, contextId: string, amount: number, wait: boolean): Promise<ReceivedMessage> {
 	const {id, initialValue} = semaphore;
 	const message = protocol.publish({
@@ -261,8 +258,20 @@ export class SemaphoreCreationError extends Error {
 		return 'SempahoreCreationError';
 	}
 
-	constructor(semaphore: Semaphore, {initialValue}: SemaphoreCreationFailed) {
-		super(`Failed to create semaphore: expected initial value ${semaphore.initialValue} (got ${initialValue})`);
+	constructor(semaphore: Semaphore, {initialValue, managed}: SemaphoreCreationFailed) {
+		const initialValueSuffix = `initial value ${semaphore.initialValue} (got ${initialValue})`;
+		if (semaphore instanceof ManagedSemaphore) {
+			if (managed) {
+				super(`Failed to create semaphore: expected ${initialValueSuffix}`);
+			} else {
+				super(`Failed to create semaphore: expected unmanaged and ${initialValueSuffix}`);
+			}
+		} else if (managed) {
+			super(`Failed to create unmanaged semaphore: expected managed and ${initialValueSuffix}`);
+		} else {
+			super(`Failed to create unmanaged semaphore: expected ${initialValueSuffix}`);
+		}
+
 		this.semaphoreId = semaphore.id;
 	}
 }

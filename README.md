@@ -134,7 +134,9 @@ const initialValue = 3; // Must be non-negative.
 const semaphore = context.createUnmanagedSemaphore('my-semaphore', initialValue);
 ```
 
-These semaphores have three methods. `down()` and `downNow()` decrement the value and `up()` increments:
+Unmanaged semaphores mustn't use the same ID as a managed semaphore, within the same context. Semaphores with the same ID must be created with the same initial value. Mismatched managed and unmanaged semaphores, or those created with different values are unusable. Their methods will reject with a `SemaphoreCreationError`.
+
+Unmanaged semaphores have three methods. `down()` and `downNow()` decrement the value and `up()` increments:
 
 ```js
 await semaphore.down(0);
@@ -142,6 +144,6 @@ await semaphore.downNow(2);
 await semaphore.up(); // `amount` defaults to 1
 ```
 
-Like `acquire()` and `acquireNow()`, `down()` waits for the semaphore's value to be at least the requested amount, while `downNow()` rejects with `SemaphoreDownError` if the value cannot be decremented immediately.
+Like the `acquire()` and `acquireNow()` methods of managed semaphores, `down()` waits for the semaphore's value to be at least the requested amount, while `downNow()` rejects with `SemaphoreDownError` if the value cannot be decremented immediately.
 
 These unmanaged semaphores do not release the "acquired" amount when a test worker exits.

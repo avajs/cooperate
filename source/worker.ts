@@ -34,8 +34,7 @@ export default factory;
 type Context = {
 	locks: Map<string, {holderId: string; waiting: Array<{ holderId: string; notify: () => void }>}>;
 	reservedValues: Set<bigint | number | string>;
-	managedSemaphores: Map<string, Semaphore>;
-	unmanagedSemaphores: Map<string, Semaphore>;
+	semaphores: Map<string, Semaphore>;
 };
 
 const sharedContexts = new Map<string, Context>();
@@ -44,8 +43,7 @@ function getContext(id: string): Context {
 	const context = sharedContexts.get(id) ?? {
 		locks: new Map(),
 		reservedValues: new Set(),
-		managedSemaphores: new Map(),
-		unmanagedSemaphores: new Map()
+		semaphores: new Map()
 	};
 	sharedContexts.set(id, context);
 	return context;
@@ -151,7 +149,7 @@ class Semaphore {
 	public value: number;
 	public queue: Array<{id: string; amount: number; resolve: () => void}>;
 
-	constructor(public readonly initialValue: number) {
+	constructor(public readonly initialValue: number, public readonly managed: boolean) {
 		this.value = initialValue;
 		this.queue = [];
 	}
@@ -201,17 +199,14 @@ function getSemaphore(
 	managed: boolean
 ): [ok: boolean, semaphore: Semaphore] {
 	const context = getContext(contextId);
-	const semaphores = managed ?
-		context.managedSemaphores :
-		context.unmanagedSemaphores;
-	let semaphore = semaphores.get(id);
+	let semaphore = context.semaphores.get(id);
 
 	if (semaphore !== undefined) {
-		return [semaphore.initialValue === initialValue, semaphore];
+		return [semaphore.initialValue === initialValue && semaphore.managed === managed, semaphore];
 	}
 
-	semaphore = new Semaphore(initialValue);
-	semaphores.set(id, semaphore);
+	semaphore = new Semaphore(initialValue, managed);
+	context.semaphores.set(id, semaphore);
 	return [true, semaphore];
 }
 
@@ -223,7 +218,8 @@ async function downSemaphore(
 	if (!ok) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
-			initialValue: semaphore.initialValue
+			initialValue: semaphore.initialValue,
+			managed: semaphore.managed
 		});
 		return;
 	}
@@ -287,7 +283,8 @@ function upSemaphore(
 	if (!ok) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
-			initialValue: semaphore.initialValue
+			initialValue: semaphore.initialValue,
+			managed: semaphore.managed
 		});
 		return;
 	}

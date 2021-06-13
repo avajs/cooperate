@@ -279,10 +279,15 @@ test('can always release zero', async t => {
 	t.notThrows(() => release(0));
 });
 
-test('managed and unmanaged semaphores can\'t collide', async t => {
+test.serial('managed and unmanaged semaphores share their ID space', async t => {
 	const context = new SharedContext(test.meta.file);
-	const managed = context.createSemaphore(t.title, 2);
-	const unmanaged = context.createUnmanagedSemaphore(t.title, 3);
-	t.is(await probeManagement(managed), 2);
-	t.is(await probeManualRelease(unmanaged), 3);
+	const managedFirst = context.createSemaphore(t.title, 2);
+	await managedFirst.acquire();
+	const unmanagedSecond = context.createUnmanagedSemaphore(t.title, 3);
+	await t.throwsAsync(unmanagedSecond.down(), {instanceOf: SemaphoreCreationError});
+
+	const unmanagedFirst = context.createUnmanagedSemaphore(t.title.toUpperCase(), 3);
+	await unmanagedFirst.down();
+	const managedSecond = context.createSemaphore(t.title.toUpperCase(), 2);
+	await t.throwsAsync(managedSecond.acquire(), {instanceOf: SemaphoreCreationError});
 });
