@@ -255,7 +255,7 @@ export class SemaphoreCreationError extends Error {
 	readonly semaphoreId: string;
 
 	get name() {
-		return 'SempahoreCreationError';
+		return 'SemaphoreCreationError';
 	}
 
 	constructor(semaphore: Semaphore, {initialValue, managed}: SemaphoreCreationFailed) {
