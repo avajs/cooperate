@@ -89,16 +89,16 @@ export class ManagedSemaphore {
 		public readonly id: string,
 		public readonly initialValue: number
 	) {
-		if (initialValue < 0) {
-			throw new RangeError('initialValue must be non-negative');
+		if (initialValue < 0 || !Number.isSafeInteger(initialValue)) {
+			throw new RangeError('initialValue must be a non-negative safe integer');
 		}
 
 		this.#context = context;
 	}
 
 	async acquire(amount = 1) {
-		if (amount < 0) {
-			throw new RangeError('amount must be non-negative');
+		if (amount < 0 || !Number.isSafeInteger(amount)) {
+			throw new RangeError('amount must be a non-negative safe integer');
 		}
 
 		// Allow acquire() to be called before the shared worker is availabe.
@@ -106,8 +106,8 @@ export class ManagedSemaphore {
 
 		const reply = await downSemaphore(this, this.#context.id, amount, true);
 		return (release = amount) => {
-			if (release < 0 || release > amount) {
-				throw new RangeError('Amount to release must be >= 0 and <= remaining amount');
+			if (release < 0 || !Number.isSafeInteger(release) || release > amount) {
+				throw new RangeError('Amount to release must be a non-negative safe integer and <= remaining amount');
 			}
 
 			amount -= release;
@@ -119,8 +119,8 @@ export class ManagedSemaphore {
 	}
 
 	async acquireNow(amount = 1) {
-		if (amount < 0) {
-			throw new RangeError('amount must be non-negative');
+		if (amount < 0 || !Number.isSafeInteger(amount)) {
+			throw new RangeError('amount must be a non-negative safe integer');
 		}
 
 		// Down immediately, which will fail if the protocol is not available.
@@ -149,16 +149,16 @@ export class UnmanagedSemaphore {
 		public readonly id: string,
 		public readonly initialValue: number
 	) {
-		if (initialValue < 0) {
-			throw new RangeError('initialValue must be non-negative');
+		if (initialValue < 0 || !Number.isSafeInteger(initialValue)) {
+			throw new RangeError('initialValue must be a non-negative safe integer');
 		}
 
 		this.#context = context;
 	}
 
 	async down(amount = 1) {
-		if (amount < 0) {
-			throw new RangeError('amount must be non-negative');
+		if (amount < 0|| !Number.isSafeInteger(amount)) {
+			throw new RangeError('amount must be a non-negative safe integer');
 		}
 
 		// Allow down() to be called before the shared worker is availabe.
@@ -168,8 +168,8 @@ export class UnmanagedSemaphore {
 	}
 
 	async downNow(amount = 1) {
-		if (amount < 0) {
-			throw new RangeError('amount must be non-negative');
+		if (amount < 0|| !Number.isSafeInteger(amount)) {
+			throw new RangeError('amount must be a non-negative safe integer');
 		}
 
 		// Down immediately, which will fail if the protocol is not available.
@@ -179,8 +179,8 @@ export class UnmanagedSemaphore {
 	}
 
 	async up(amount = 1) {
-		if (amount < 0) {
-			throw new RangeError('amount must be non-negative');
+		if (amount < 0 || !Number.isSafeInteger(amount)) {
+			throw new RangeError('amount must be a non-negative safe integer');
 		}
 
 		// Allow up() to be called before the shared worker is availabe.

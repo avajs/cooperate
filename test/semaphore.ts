@@ -165,26 +165,24 @@ test('managed semaphore amounts can\'t be negative', async t => {
 	}
 });
 
-test('unmanaged semaphore values can be non-integral', async t => {
+test('unmanaged semaphore values must be integers', async t => {
 	const context = new SharedContext(test.meta.file);
-	const semaphore = context.createUnmanagedSemaphore(t.title, 1.5);
-	await semaphore.down(0.5);
-	await semaphore.down(0.5);
-	await t.throwsAsync(semaphore.downNow(1));
-	await t.notThrowsAsync(semaphore.downNow(0.5));
-	await semaphore.up(1.5);
-	await t.throwsAsync(semaphore.downNow(2));
-	await t.notThrowsAsync(semaphore.downNow(1.5));
+	t.throws(() => context.createUnmanagedSemaphore(t.title, 1.5), {instanceOf: RangeError});
+	const semaphore = context.createUnmanagedSemaphore(t.title, 2);
+	await t.throwsAsync(semaphore.down(0.5), {instanceOf: RangeError});
+	await t.throwsAsync(semaphore.downNow(0.5), {instanceOf: RangeError});
+	await semaphore.down(2);
+	await t.throwsAsync(semaphore.up(1.5), {instanceOf: RangeError});
 });
 
-test('managed semaphore values can be non-integral', async t => {
-	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 1.5);
-	const release1 = await semaphore.acquire(0.75);
-	t.notThrows(() => release1(0.25));
-	release1();
-	const release2 = await semaphore.acquireNow(0.5);
-	t.notThrows(() => release2(0.25));
-	release2();
+test('managed semaphore values must be integers', async t => {
+	const context = new SharedContext(test.meta.file);
+	t.throws(() => context.createSemaphore(t.title, 1.5), {instanceOf: RangeError});
+	const semaphore = context.createSemaphore(t.title, 2);
+	await t.throwsAsync(semaphore.acquire(0.75), {instanceOf: RangeError});
+	await t.throwsAsync(semaphore.acquireNow(0.75), {instanceOf: RangeError});
+	const release1 = await semaphore.acquire(1);
+	t.throws(() => release1(0.25), {instanceOf: RangeError});
 });
 
 test('attempt to acquire() semaphore concurrently in different processes', async t => {
