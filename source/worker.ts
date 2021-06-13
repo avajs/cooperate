@@ -34,8 +34,8 @@ export default factory;
 type Context = {
 	locks: Map<string, {holderId: string; waiting: Array<{ holderId: string; notify: () => void }>}>;
 	reservedValues: Set<bigint | number | string>;
-	acquiringSemaphores: Map<string, Semaphore>;
-	countingSemaphores: Map<string, Semaphore>;
+	managedSemaphores: Map<string, Semaphore>;
+	unmanagedSemaphores: Map<string, Semaphore>;
 };
 
 const sharedContexts = new Map<string, Context>();
@@ -44,8 +44,8 @@ function getContext(id: string): Context {
 	const context = sharedContexts.get(id) ?? {
 		locks: new Map(),
 		reservedValues: new Set(),
-		acquiringSemaphores: new Map(),
-		countingSemaphores: new Map()
+		managedSemaphores: new Map(),
+		unmanagedSemaphores: new Map()
 	};
 	sharedContexts.set(id, context);
 	return context;
@@ -198,12 +198,12 @@ function getSemaphore(
 	contextId: string,
 	id: string,
 	initialValue: number,
-	autoRelease: boolean
+	managed: boolean
 ): [ok: boolean, semaphore: Semaphore] {
 	const context = getContext(contextId);
-	const semaphores = autoRelease ?
-		context.acquiringSemaphores :
-		context.countingSemaphores;
+	const semaphores = managed ?
+		context.managedSemaphores :
+		context.unmanagedSemaphores;
 	let semaphore = semaphores.get(id);
 
 	if (semaphore !== undefined) {
@@ -217,9 +217,9 @@ function getSemaphore(
 
 async function downSemaphore(
 	message: ReceivedMessage,
-	{contextId, semaphore: {autoRelease, id, initialValue}, amount, wait}: SemaphoreDown
+	{contextId, semaphore: {managed, id, initialValue}, amount, wait}: SemaphoreDown
 ): Promise<void> {
-	const [ok, semaphore] = getSemaphore(contextId, id, initialValue, autoRelease);
+	const [ok, semaphore] = getSemaphore(contextId, id, initialValue, managed);
 	if (!ok) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
@@ -233,7 +233,7 @@ async function downSemaphore(
 
 	if (wait) {
 		release = message.testWorker.teardown((clearQueue = true) => {
-			if (acquired > 0 && autoRelease) {
+			if (acquired > 0 && managed) {
 				semaphore.up(acquired);
 			}
 
@@ -263,7 +263,7 @@ async function downSemaphore(
 		type: MessageType.SEMAPHORE_SUCCEEDED
 	});
 
-	if (autoRelease) {
+	if (managed) {
 		for await (const {data} of reply.replies()) {
 			if (data.type === MessageType.SEMAPHORE_RELEASE) {
 				const releaseAmount = Math.min(acquired, data.amount);
@@ -281,9 +281,9 @@ async function downSemaphore(
 
 function upSemaphore(
 	message: ReceivedMessage,
-	{contextId, semaphore: {autoRelease, id, initialValue}, amount}: SemaphoreUp
+	{contextId, semaphore: {managed, id, initialValue}, amount}: SemaphoreUp
 ) {
-	const [ok, semaphore] = getSemaphore(contextId, id, initialValue, autoRelease);
+	const [ok, semaphore] = getSemaphore(contextId, id, initialValue, managed);
 	if (!ok) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,

@@ -1,9 +1,9 @@
 import test, {ExecutionContext} from 'ava';
-import {SharedContext, SemaphoreCreationError, SemaphoreDownError, CountingSemaphore, AcquiringSemaphore} from '../source';
+import {SharedContext, SemaphoreCreationError, SemaphoreDownError, UnmanagedSemaphore, ManagedSemaphore} from '../source';
 import synchronize from './_synchronize';
 
 test('acquire binary semaphore', async t => {
-	const semaphore = new SharedContext(t.title).createCountingSemaphore(t.title, 1);
+	const semaphore = new SharedContext(t.title).createUnmanagedSemaphore(t.title, 1);
 
 	const first = semaphore.down();
 	await t.notThrowsAsync(first);
@@ -20,7 +20,7 @@ test('acquire binary semaphore', async t => {
 	await t.notThrowsAsync(third);
 });
 
-test('acquiring semaphore can\'t register mismatched initial values', async t => {
+test('managed semaphore can\'t register mismatched initial values', async t => {
 	const context = new SharedContext(t.title);
 	const semaphoreOne = context.createSemaphore(t.title, 1);
 	await semaphoreOne.acquire(); // Ensures the semaphore has been created
@@ -35,10 +35,10 @@ test('acquiring semaphore can\'t register mismatched initial values', async t =>
 
 test('counting semaphore can\'t register mismatched initial values', async t => {
 	const context = new SharedContext(t.title);
-	const semaphoreOne = context.createCountingSemaphore(t.title, 1);
+	const semaphoreOne = context.createUnmanagedSemaphore(t.title, 1);
 	await semaphoreOne.down(); // Ensures the semaphore has been created
 
-	const semaphoreTwo = context.createCountingSemaphore(t.title, 2);
+	const semaphoreTwo = context.createUnmanagedSemaphore(t.title, 2);
 	const expected = {
 		instanceOf: SemaphoreCreationError
 	};
@@ -50,7 +50,7 @@ test('counting semaphore can\'t register mismatched initial values', async t => 
 // Tries to down() the semaphore at increasing amounts. Returns the last amount
 // that succeeds. _If_ nothing else is using the semaphore, this is the
 // semaphore's available capacity.
-async function probeManualRelease(semaphore: CountingSemaphore) {
+async function probeManualRelease(semaphore: UnmanagedSemaphore) {
 	let amount = 0;
 	try {
 		while (true) {
@@ -67,7 +67,7 @@ async function probeManualRelease(semaphore: CountingSemaphore) {
 	}
 }
 
-async function probeAutoRelease(semaphore: AcquiringSemaphore): Promise<number> {
+async function probeManagement(semaphore: ManagedSemaphore): Promise<number> {
 	let amount = 0;
 	try {
 		while (true) {
@@ -84,8 +84,8 @@ async function probeAutoRelease(semaphore: AcquiringSemaphore): Promise<number> 
 	}
 }
 
-test('acquire counting semaphore', async t => {
-	const semaphore = new SharedContext(test.meta.file).createCountingSemaphore(t.title, 3);
+test('acquire unmanaged semaphore', async t => {
+	const semaphore = new SharedContext(test.meta.file).createUnmanagedSemaphore(t.title, 3);
 	const unblocked: number[] = [];
 
 	await semaphore.down(2).then(() => unblocked.push(1));
@@ -102,7 +102,7 @@ test('acquire counting semaphore', async t => {
 	t.deepEqual(unblocked, [1, 2, 3]);
 });
 
-test('acquire acquiring semaphore', async t => {
+test('acquire managed semaphore', async t => {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 3);
 	const unblocked: number[] = [];
 
@@ -110,47 +110,47 @@ test('acquire acquiring semaphore', async t => {
 	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
 	one.then(() => unblocked.push(1));
 	const releaseOne = await one;
-	t.is(await probeAutoRelease(semaphore), 1);
+	t.is(await probeManagement(semaphore), 1);
 	const two = semaphore.acquire(2);
 	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
 	two.then(() => unblocked.push(2));
-	t.is(await probeAutoRelease(semaphore), 1);
+	t.is(await probeManagement(semaphore), 1);
 	const three = semaphore.acquire();
 	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
 	three.then(() => unblocked.push(3));
-	t.is(await probeAutoRelease(semaphore), 1);
+	t.is(await probeManagement(semaphore), 1);
 	releaseOne();
 	const releaseTwo = await two;
-	t.is(await probeAutoRelease(semaphore), 0);
+	t.is(await probeManagement(semaphore), 0);
 	releaseTwo();
 	await three;
 	t.deepEqual(unblocked, [1, 2, 3]);
 });
 
-test('increment counting semaphore before decrementing', async t => {
-	const semaphore = new SharedContext(test.meta.file).createCountingSemaphore(t.title, 0);
+test('increment unmanaged semaphore before decrementing', async t => {
+	const semaphore = new SharedContext(test.meta.file).createUnmanagedSemaphore(t.title, 0);
 	t.is(await probeManualRelease(semaphore), 0);
 	await semaphore.up();
 	t.is(await probeManualRelease(semaphore), 1);
 	await semaphore.downNow();
 });
 
-test('counting semaphore amounts can\'t be negative', async t => {
+test('unmanaged semaphore amounts can\'t be negative', async t => {
 	const context = new SharedContext(test.meta.file);
-	t.throws(() => context.createCountingSemaphore(t.title, -1), {instanceOf: RangeError});
-	const semaphore = context.createCountingSemaphore(t.title, 0);
+	t.throws(() => context.createUnmanagedSemaphore(t.title, -1), {instanceOf: RangeError});
+	const semaphore = context.createUnmanagedSemaphore(t.title, 0);
 	await t.throwsAsync(semaphore.down(-1), {instanceOf: RangeError});
 	await t.throwsAsync(semaphore.downNow(-1), {instanceOf: RangeError});
 	await t.throwsAsync(semaphore.up(-1), {instanceOf: RangeError});
 });
 
-test('acquiring semaphore amounts can\'t be negative', async t => {
+test('managed semaphore amounts can\'t be negative', async t => {
 	const context = new SharedContext(test.meta.file);
 	t.throws(() => context.createSemaphore(t.title, -1), {instanceOf: RangeError});
 	const semaphore = context.createSemaphore(t.title, 1);
 	await t.throwsAsync(semaphore.acquire(-1), {instanceOf: RangeError});
 	await t.throwsAsync(semaphore.acquireNow(-1), {instanceOf: RangeError});
-	t.is(await probeAutoRelease(semaphore), 1);
+	t.is(await probeManagement(semaphore), 1);
 
 	{
 		const release = await semaphore.acquire();
@@ -165,9 +165,9 @@ test('acquiring semaphore amounts can\'t be negative', async t => {
 	}
 });
 
-test('counting semaphore values can be non-integral', async t => {
+test('unmanaged semaphore values can be non-integral', async t => {
 	const context = new SharedContext(test.meta.file);
-	const semaphore = context.createCountingSemaphore(t.title, 1.5);
+	const semaphore = context.createUnmanagedSemaphore(t.title, 1.5);
 	await semaphore.down(0.5);
 	await semaphore.down(0.5);
 	await t.throwsAsync(semaphore.downNow(1));
@@ -177,7 +177,7 @@ test('counting semaphore values can be non-integral', async t => {
 	await t.notThrowsAsync(semaphore.downNow(1.5));
 });
 
-test('acquiring semaphore values can be non-integral', async t => {
+test('managed semaphore values can be non-integral', async t => {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 1.5);
 	const release1 = await semaphore.acquire(0.75);
 	t.notThrows(() => release1(0.25));
@@ -228,22 +228,22 @@ test('semaphore is cleaned up when a test worker exits', async t => {
 	await t.notThrowsAsync(releaseSemaphorePromise);
 });
 
-type Acquirer = AcquiringSemaphore['acquire'];
+type Acquirer = ManagedSemaphore['acquire'];
 
 async function testPartialRelease(t: ExecutionContext, acquire: Acquirer) {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 3);
 	const release = await acquire.call(semaphore, 3);
-	t.is(await probeAutoRelease(semaphore), 0);
+	t.is(await probeManagement(semaphore), 0);
 	release(1);
-	t.is(await probeAutoRelease(semaphore), 1);
+	t.is(await probeManagement(semaphore), 1);
 	release(2);
-	t.is(await probeAutoRelease(semaphore), 3);
+	t.is(await probeManagement(semaphore), 3);
 }
 
 testPartialRelease.title = (provided: string, acquire: Acquirer) => `${provided || `${acquire.name}()`} acquisitions can be partially released`;
 
-test(testPartialRelease, AcquiringSemaphore.prototype.acquire);
-test(testPartialRelease, AcquiringSemaphore.prototype.acquireNow);
+test(testPartialRelease, ManagedSemaphore.prototype.acquire);
+test(testPartialRelease, ManagedSemaphore.prototype.acquireNow);
 
 async function overRelease(t: ExecutionContext, acquire: Acquirer) {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
@@ -256,8 +256,8 @@ async function overRelease(t: ExecutionContext, acquire: Acquirer) {
 overRelease.title = (provided: string, acquire: Acquirer) =>
 	`${provided || `${acquire.name}()`} can't release more than the acquired amount`;
 
-test(overRelease, AcquiringSemaphore.prototype.acquire);
-test(overRelease, AcquiringSemaphore.prototype.acquireNow);
+test(overRelease, ManagedSemaphore.prototype.acquire);
+test(overRelease, ManagedSemaphore.prototype.acquireNow);
 
 async function overReleaseRemaining(t: ExecutionContext, acquire: Acquirer) {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
@@ -269,8 +269,8 @@ async function overReleaseRemaining(t: ExecutionContext, acquire: Acquirer) {
 overReleaseRemaining.title = (provided: string, acquire: Acquirer) =>
 	`${provided || `${acquire.name}()`} can't release more than the remaining amount`;
 
-test(overReleaseRemaining, AcquiringSemaphore.prototype.acquire);
-test(overReleaseRemaining, AcquiringSemaphore.prototype.acquireNow);
+test(overReleaseRemaining, ManagedSemaphore.prototype.acquire);
+test(overReleaseRemaining, ManagedSemaphore.prototype.acquireNow);
 
 test('can always release zero', async t => {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
@@ -279,10 +279,10 @@ test('can always release zero', async t => {
 	t.notThrows(() => release(0));
 });
 
-test('counting and acquiring semaphores can\'t collide', async t => {
+test('managed and unmanaged semaphores can\'t collide', async t => {
 	const context = new SharedContext(test.meta.file);
-	const acquiring = context.createSemaphore(t.title, 2);
-	const counting = context.createCountingSemaphore(t.title, 3);
-	t.is(await probeAutoRelease(acquiring), 2);
-	t.is(await probeManualRelease(counting), 3);
+	const managed = context.createSemaphore(t.title, 2);
+	const unmanaged = context.createUnmanagedSemaphore(t.title, 3);
+	t.is(await probeManagement(managed), 2);
+	t.is(await probeManualRelease(unmanaged), 3);
 });

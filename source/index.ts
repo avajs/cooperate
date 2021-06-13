@@ -81,7 +81,7 @@ export class LockAcquisitionError extends Error {
 	}
 }
 
-class Semaphore_ {
+class Semaphore {
 	constructor(
 		public readonly id: string,
 		public readonly initialValue: number
@@ -92,7 +92,7 @@ class Semaphore_ {
 	}
 }
 
-export class AcquiringSemaphore extends Semaphore_ {
+export class ManagedSemaphore extends Semaphore {
 	readonly #context: SharedContext;
 
 	constructor(
@@ -149,7 +149,7 @@ export class AcquiringSemaphore extends Semaphore_ {
 	}
 }
 
-export class CountingSemaphore extends Semaphore_ {
+export class UnmanagedSemaphore extends Semaphore {
 	readonly #context: SharedContext;
 
 	constructor(
@@ -195,7 +195,7 @@ export class CountingSemaphore extends Semaphore_ {
 		const message = protocol.publish({
 			type: MessageType.SEMAPHORE_UP,
 			contextId: this.#context.id,
-			semaphore: {autoRelease: false, id, initialValue},
+			semaphore: {managed: false, id, initialValue},
 			amount
 		});
 
@@ -215,14 +215,12 @@ export class CountingSemaphore extends Semaphore_ {
 	}
 }
 
-export type Semaphore = AcquiringSemaphore | CountingSemaphore;
-
-async function downSemaphore(semaphore: Semaphore_, contextId: string, amount: number, wait: boolean): Promise<ReceivedMessage> {
+async function downSemaphore(semaphore: Semaphore, contextId: string, amount: number, wait: boolean): Promise<ReceivedMessage> {
 	const {id, initialValue} = semaphore;
 	const message = protocol.publish({
 		type: MessageType.SEMAPHORE_DOWN,
 		contextId,
-		semaphore: {autoRelease: semaphore instanceof AcquiringSemaphore, id, initialValue},
+		semaphore: {managed: semaphore instanceof ManagedSemaphore, id, initialValue},
 		amount,
 		wait
 	});
@@ -263,7 +261,7 @@ export class SemaphoreCreationError extends Error {
 		return 'SempahoreCreationError';
 	}
 
-	constructor(semaphore: Semaphore_, {initialValue}: SemaphoreCreationFailed) {
+	constructor(semaphore: Semaphore, {initialValue}: SemaphoreCreationFailed) {
 		super(`Failed to create semaphore: expected initial value ${semaphore.initialValue} (got ${initialValue})`);
 		this.semaphoreId = semaphore.id;
 	}
@@ -276,12 +274,12 @@ export class SharedContext {
 		return new Lock(this, id);
 	}
 
-	createSemaphore(id: string, initialValue: number): AcquiringSemaphore {
-		return new AcquiringSemaphore(this, id, initialValue);
+	createSemaphore(id: string, initialValue: number): ManagedSemaphore {
+		return new ManagedSemaphore(this, id, initialValue);
 	}
 
-	createCountingSemaphore(id: string, initialValue: number): CountingSemaphore {
-		return new CountingSemaphore(this, id, initialValue);
+	createUnmanagedSemaphore(id: string, initialValue: number): UnmanagedSemaphore {
+		return new UnmanagedSemaphore(this, id, initialValue);
 	}
 
 	async reserve<T extends bigint | number | string>(...values: T[]): Promise<T[]> {

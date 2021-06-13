@@ -40,9 +40,9 @@ export type ReservedIndexes = {
 };
 
 type SemaphoreSetup = {
-	autoRelease: boolean;
 	id: string;
 	initialValue: number;
+	managed: boolean;
 };
 
 export type SemaphoreDown = {

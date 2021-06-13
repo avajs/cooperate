@@ -102,7 +102,7 @@ const release = await semaphore.acquire();
 
 `acquire()` returns a function, `release()`, which increments the semaphore's value by the same amount as was acquired.
 
-If you don't call `release()`, it'll be run automatically when the test worker exits. Any pending `acquire()` calls will also be removed from the queue at this time.
+The semaphore is _managed_: if you don't call `release()`, it'll be run automatically when the test worker exits. Any pending `acquire()` calls will also be removed from the queue at this time.
 
 `acquireNow()` works like `acquire()`, except that if the semaphore can't be decremented immediately, `acquireNow()` rejects with a `SemaphoreDownError` rather than wait.
 
@@ -125,13 +125,13 @@ release(); // Increments the semaphore by the remaining 2
 
 `acquireNow()` skips the queue and decrements immediately if possible.
 
-#### Lower-level counting semaphores
+#### Lower-level, unmanaged semaphores
 
-You can create a lower-level counting semaphore which doesn't have any auto-release behavior. Instead you need to increment the semaphore in code.
+You can create a lower-level, _unmanaged_ semaphore which doesn't have any auto-release behavior. Instead you need to increment the semaphore in code.
 
 ```js
 const initialValue = 3; // Must be non-negative.
-const semaphore = context.createCountingSemaphore('my-semaphore', initialValue);
+const semaphore = context.createUnmanagedSemaphore('my-semaphore', initialValue);
 ```
 
 These semaphores have three methods. `down()` and `downNow()` decrement the value and `up()` increments:
@@ -144,4 +144,4 @@ await semaphore.up(); // `amount` defaults to 1
 
 Like `acquire()` and `acquireNow()`, `down()` waits for the semaphore's value to be at least the requested amount, while `downNow()` rejects with `SemaphoreDownError` if the value cannot be decremented immediately.
 
-These `CountingSemaphore`s do not release the "acquired" amount when a test worker exits.
+These unmanaged semaphores do not release the "acquired" amount when a test worker exits.
