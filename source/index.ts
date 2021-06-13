@@ -157,7 +157,7 @@ export class UnmanagedSemaphore {
 	}
 
 	async down(amount = 1) {
-		if (amount < 0|| !Number.isSafeInteger(amount)) {
+		if (amount < 0 || !Number.isSafeInteger(amount)) {
 			throw new RangeError('amount must be a non-negative safe integer');
 		}
 
@@ -168,7 +168,7 @@ export class UnmanagedSemaphore {
 	}
 
 	async downNow(amount = 1) {
-		if (amount < 0|| !Number.isSafeInteger(amount)) {
+		if (amount < 0 || !Number.isSafeInteger(amount)) {
 			throw new RangeError('amount must be a non-negative safe integer');
 		}
 
