@@ -87,7 +87,7 @@ const reserved = await context.reserve(1, 2, 3);
 You can create a [counting semaphore](https://www.guru99.com/semaphore-in-operating-system.html) within a shared context:
 
 ```js
-const initialValue = 3; // Must be non-negative.
+const initialValue = 3; // Must be a non-negative integer.
 const semaphore = context.createSemaphore('my-semaphore', initialValue);
 ```
 
@@ -106,7 +106,7 @@ The semaphore is _managed_: if you don't call `release()`, it'll be run automati
 
 `acquireNow()` works like `acquire()`, except that if the semaphore can't be decremented immediately, `acquireNow()` rejects with a `SemaphoreDownError` rather than wait.
 
-Semaphores are _weighted_. `acquire()` and `acquireNow()` accept a non-negative amount, defaulting to `1`, by which to decrement or increment the value:
+Semaphores are _weighted_. `acquire()` and `acquireNow()` accept a non-negative integer amount, defaulting to `1`, by which to decrement or increment the value:
 
 ```js
 await semaphore.acquire(0);
@@ -130,7 +130,7 @@ release(); // Increments the semaphore by the remaining 2
 You can create a lower-level, _unmanaged_ semaphore which doesn't have any auto-release behavior. Instead you need to increment the semaphore in code.
 
 ```js
-const initialValue = 3; // Must be non-negative.
+const initialValue = 3; // Must be a non-negative integer.
 const semaphore = context.createUnmanagedSemaphore('my-semaphore', initialValue);
 ```
 
