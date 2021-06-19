@@ -277,7 +277,7 @@ test('can always release zero', async t => {
 	t.notThrows(() => release(0));
 });
 
-test.serial('managed and unmanaged semaphores share their ID space', async t => {
+test('managed and unmanaged semaphores share their ID space', async t => {
 	const context = new SharedContext(test.meta.file);
 	const managedFirst = context.createSemaphore(t.title, 2);
 	await managedFirst.acquire();
