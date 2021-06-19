@@ -5,7 +5,9 @@ import {
 	Data,
 	Lock,
 	MessageType,
-	Reservation
+	Reservation,
+	SemaphoreDown,
+	SemaphoreUp
 } from './types';
 
 type ReceivedMessage = SharedWorker.Experimental.ReceivedMessage<Data>;
@@ -19,6 +21,10 @@ const factory: SharedWorker.Factory = async ({negotiateProtocol}) => {
 			void acquireLock(message, data);
 		} else if (data.type === MessageType.RESERVE) {
 			reserve(message, data);
+		} else if (data.type === MessageType.SEMAPHORE_DOWN) {
+			void downSemaphore(message, data);
+		} else if (data.type === MessageType.SEMAPHORE_UP) {
+			upSemaphore(message, data);
 		}
 	}
 };
@@ -28,6 +34,7 @@ export default factory;
 type Context = {
 	locks: Map<string, {holderId: string; waiting: Array<{ holderId: string; notify: () => void }>}>;
 	reservedValues: Set<bigint | number | string>;
+	semaphores: Map<string, Semaphore>;
 };
 
 const sharedContexts = new Map<string, Context>();
@@ -35,7 +42,8 @@ const sharedContexts = new Map<string, Context>();
 function getContext(id: string): Context {
 	const context = sharedContexts.get(id) ?? {
 		locks: new Map(),
-		reservedValues: new Set()
+		reservedValues: new Set(),
+		semaphores: new Map()
 	};
 	sharedContexts.set(id, context);
 	return context;
@@ -46,7 +54,6 @@ async function acquireLock(message: ReceivedMessage, {contextId, lockId, wait}: 
 
 	const release = message.testWorker.teardown(() => {
 		const current = context.locks.get(lockId);
-		/* c8 ignore next 3 */
 		if (current === undefined) { // This won't actually happen at runtime.
 			return;
 		}
@@ -99,7 +106,7 @@ async function acquireLock(message: ReceivedMessage, {contextId, lockId, wait}: 
 		return;
 	}
 
-	const current = context.locks.get(lockId) /* c8 ignore next */ ?? never();
+	const current = context.locks.get(lockId) ?? never();
 	current.waiting.push({
 		holderId: message.id,
 		async notify() {
@@ -132,4 +139,158 @@ function reserve(message: ReceivedMessage, {contextId, values}: Reservation): vo
 	});
 
 	message.reply({type: MessageType.RESERVED_INDEXES, indexes});
+}
+
+// A weighted, counting semaphore.
+// Waiting threads are woken in FIFO order (the semaphore is "fair").
+// tryDown() ignores waiting threads (it may "barge").
+class Semaphore {
+	public value: number;
+	public queue: Array<{id: string; amount: number; resolve: () => void}>;
+
+	constructor(public readonly initialValue: number, public readonly managed: boolean) {
+		this.value = initialValue;
+		this.queue = [];
+	}
+
+	// Down the semaphore by amount, waiting first if necessary, associating the
+	// acquisition with id. Callback is called once, synchronously, when the
+	// decrement occurs.
+	async down(amount: number, id: string, callback: () => void): Promise<void> {
+		if (this.queue.length > 0 || !this.tryDown(amount)) {
+			return new Promise(resolve => {
+				this.queue.push({
+					id,
+					amount,
+					resolve() {
+						callback();
+						resolve();
+					}
+				});
+			});
+		}
+
+		callback();
+	}
+
+	tryDown(amount: number): boolean {
+		if (this.value >= amount) {
+			this.value -= amount;
+			return true;
+		}
+
+		return false;
+	}
+
+	up(amount: number) {
+		this.value += amount;
+
+		while (this.queue.length > 0 && this.tryDown(this.queue[0].amount)) {
+			this.queue.shift()?.resolve();
+		}
+	}
+}
+
+function getSemaphore(
+	contextId: string,
+	id: string,
+	initialValue: number,
+	managed: boolean
+): [ok: boolean, semaphore: Semaphore] {
+	const context = getContext(contextId);
+	let semaphore = context.semaphores.get(id);
+
+	if (semaphore !== undefined) {
+		return [semaphore.initialValue === initialValue && semaphore.managed === managed, semaphore];
+	}
+
+	semaphore = new Semaphore(initialValue, managed);
+	context.semaphores.set(id, semaphore);
+	return [true, semaphore];
+}
+
+async function downSemaphore(
+	message: ReceivedMessage,
+	{contextId, semaphore: {managed, id, initialValue}, amount, wait}: SemaphoreDown
+): Promise<void> {
+	const [ok, semaphore] = getSemaphore(contextId, id, initialValue, managed);
+	if (!ok) {
+		message.reply({
+			type: MessageType.SEMAPHORE_CREATION_FAILED,
+			initialValue: semaphore.initialValue,
+			managed: semaphore.managed
+		});
+		return;
+	}
+
+	let acquired = 0;
+	let release;
+
+	if (wait) {
+		release = message.testWorker.teardown((clearQueue = true) => {
+			if (acquired > 0 && managed) {
+				semaphore.up(acquired);
+			}
+
+			if (clearQueue) {
+				// The waiter will never be woken, but that's fine since the test
+				// worker's already exited.
+				semaphore.queue = semaphore.queue.filter(({id}) => id !== message.id);
+			}
+		});
+
+		await semaphore.down(amount, message.id, () => {
+			acquired = amount;
+		});
+	} else if (semaphore.tryDown(amount)) {
+		acquired = amount;
+
+		release = message.testWorker.teardown(() => semaphore.up(acquired));
+	} else {
+		message.reply({
+			type: MessageType.SEMAPHORE_FAILED
+		});
+
+		return;
+	}
+
+	const reply = message.reply({
+		type: MessageType.SEMAPHORE_SUCCEEDED
+	});
+
+	if (managed) {
+		for await (const {data} of reply.replies()) {
+			if (data.type === MessageType.SEMAPHORE_RELEASE) {
+				const releaseAmount = Math.min(acquired, data.amount);
+				semaphore.up(releaseAmount);
+				acquired -= releaseAmount;
+
+				if (acquired <= 0) {
+					release(false);
+					break;
+				}
+			}
+		}
+	}
+}
+
+function upSemaphore(
+	message: ReceivedMessage,
+	{contextId, semaphore: {managed, id, initialValue}, amount}: SemaphoreUp
+) {
+	const [ok, semaphore] = getSemaphore(contextId, id, initialValue, managed);
+	if (!ok) {
+		message.reply({
+			type: MessageType.SEMAPHORE_CREATION_FAILED,
+			initialValue: semaphore.initialValue,
+			managed: semaphore.managed
+		});
+		return;
+	}
+
+	semaphore.up(amount);
+
+	message.reply({
+		type: MessageType.SEMAPHORE_SUCCEEDED
+	});
 }

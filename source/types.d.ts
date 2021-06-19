@@ -5,6 +5,12 @@ export const enum MessageType {
 	LOCK_RELEASE = 13,
 	RESERVE = 20,
 	RESERVED_INDEXES = 21,
+	SEMAPHORE_CREATION_FAILED = 30,
+	SEMAPHORE_DOWN = 31,
+	SEMAPHORE_FAILED = 32,
+	SEMAPHORE_RELEASE = 33,
+	SEMAPHORE_SUCCEEDED = 34,
+	SEMAPHORE_UP = 35,
 }
 
 export type Lock = {
@@ -33,6 +39,43 @@ export type ReservedIndexes = {
 	indexes: number[];
 };
 
+type SemaphoreSetup = {
+	id: string;
+	initialValue: number;
+	managed: boolean;
+};
+
+export type SemaphoreDown = {
+	type: MessageType.SEMAPHORE_DOWN;
+	contextId: string;
+	semaphore: SemaphoreSetup;
+	amount: number;
+	wait: boolean;
+};
+
+export type SemaphoreUp = {
+	type: MessageType.SEMAPHORE_UP;
+	contextId: string;
+	semaphore: SemaphoreSetup;
+	amount: number;
+};
+
+export type SemaphoreRelease = {
+	type: MessageType.SEMAPHORE_RELEASE;
+	amount: number;
+};
+
+export type SemaphoreResult = {
+	type: MessageType.SEMAPHORE_SUCCEEDED | MessageType.SEMAPHORE_FAILED;
+};
+
+export type SemaphoreCreationFailed = {
+	type: MessageType.SEMAPHORE_CREATION_FAILED;
+	initialValue: number;
+	managed: boolean;
+};
+
 export type Data =
 	Lock | Locked | LockRelease |
-	Reservation | ReservedIndexes;
+	Reservation | ReservedIndexes |
+	SemaphoreDown | SemaphoreResult | SemaphoreUp | SemaphoreRelease | SemaphoreCreationFailed;

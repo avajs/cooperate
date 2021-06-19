@@ -81,3 +81,69 @@ const reserved = await context.reserve(1, 2, 3);
 // `reserved` will be an array containing those values that could be reserved.
 // It could be empty.
 ```
+
+### Semaphores
+
+You can create a [counting semaphore](https://www.guru99.com/semaphore-in-operating-system.html) within a shared context:
+
+```js
+const initialValue = 3; // Must be a non-negative integer.
+const semaphore = context.createSemaphore('my-semaphore', initialValue);
+```
+
+Within the same context, semaphores with the same ID must be created with the same initial value. Semaphores created with a different value are unusable. Their methods will reject with a `SemaphoreCreationError`.
+
+Semaphores have two methods: `acquire()` and `acquireNow()`. Use `acquire()` to decrement the semaphore's value. If the semaphore's value would become negative, instead `acquire()` waits until the semaphore's value is high enough.
+
+```js
+const semaphore = context.createSemaphore('my-semaphore', 3);
+const release = await semaphore.acquire();
+```
+
+`acquire()` returns a function, `release()`, which increments the semaphore's value by the same amount as was acquired.
+
+The semaphore is _managed_: if you don't call `release()`, it'll be run automatically when the test worker exits. Any pending `acquire()` calls will also be removed from the queue at this time.
+
+`acquireNow()` works like `acquire()`, except that if the semaphore can't be decremented immediately, `acquireNow()` rejects with a `SemaphoreDownError` rather than wait.
+
+Semaphores are _weighted_. `acquire()` and `acquireNow()` accept a non-negative integer amount, defaulting to `1`, by which to decrement or increment the value:
+
+```js
+await semaphore.acquire(0);
+await semaphore.acquireNow(2);
+```
+
+You can also pass an amount to `release()` to release just part of the acquisition at a time:
+
+```js
+const release = await semaphore.acquire(3); // Decrements the semaphore by 3
+release(1); // Increments the semaphore by 1
+release(); // Increments the semaphore by the remaining 2
+```
+
+`acquire()` calls resolve in FIFO order. If the current value is `1`, and a call tries to acquire `2`, subsequent `acquire()` calls have to wait, even if they want to acquire just `1`.
+
+`acquireNow()` skips the queue and decrements immediately if possible.
+
+#### Lower-level, unmanaged semaphores
+
+You can create a lower-level, _unmanaged_ semaphore which doesn't have any auto-release behavior. Instead you need to increment the semaphore in code.
+
+```js
+const initialValue = 3; // Must be a non-negative integer.
+const semaphore = context.createUnmanagedSemaphore('my-semaphore', initialValue);
+```
+
+Unmanaged semaphores mustn't use the same ID as a managed semaphore, within the same context. Semaphores with the same ID must be created with the same initial value. Mismatched managed and unmanaged semaphores, or those created with different values are unusable. Their methods will reject with a `SemaphoreCreationError`.
+
+Unmanaged semaphores have three methods. `down()` and `downNow()` decrement the value and `up()` increments:
+
+```js
+await semaphore.down(0);
+await semaphore.downNow(2);
+await semaphore.up(); // `amount` defaults to 1
+```
+
+Like the `acquire()` and `acquireNow()` methods of managed semaphores, `down()` waits for the semaphore's value to be at least the requested amount, while `downNow()` rejects with `SemaphoreDownError` if the value cannot be decremented immediately.
+
+These unmanaged semaphores do not release the "acquired" amount when a test worker exits.
