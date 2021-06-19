@@ -54,7 +54,6 @@ async function acquireLock(message: ReceivedMessage, {contextId, lockId, wait}: 
 
 	const release = message.testWorker.teardown(() => {
 		const current = context.locks.get(lockId);
-		/* c8 ignore next 3 */
 		if (current === undefined) { // This won't actually happen at runtime.
 			return;
 		}
@@ -107,7 +106,7 @@ async function acquireLock(message: ReceivedMessage, {contextId, lockId, wait}: 
 		return;
 	}
 
-	const current = context.locks.get(lockId) /* c8 ignore next */ ?? never();
+	const current = context.locks.get(lockId) ?? never();
 	current.waiting.push({
 		holderId: message.id,
 		async notify() {

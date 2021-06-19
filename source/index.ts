@@ -37,7 +37,6 @@ export class Lock {
 			}
 		}
 
-		/* c8 ignore next 2 */
 		// The above loop will never actually break if the lock is not acquired.
 		return never();
 	}
@@ -65,7 +64,6 @@ export class Lock {
 			}
 		}
 
-		/* c8 ignore next 2 */
 		// The above loop will never actually break if the lock is not acquired.
 		return never();
 	}
@@ -204,7 +202,6 @@ export class UnmanagedSemaphore {
 			}
 		}
 
-		/* c8 ignore next 2 */
 		// The above loop will never actually break if the resources are not acquired.
 		return never();
 	}
@@ -236,7 +233,6 @@ async function downSemaphore(semaphore: Semaphore, contextId: string, amount: nu
 		}
 	}
 
-	/* c8 ignore next 2 */
 	// The above loop will never actually break if the resources are not acquired.
 	return never();
 }
@@ -307,7 +303,6 @@ export class SharedContext {
 			}
 		}
 
-		/* c8 ignore next 2 */
 		// The above loop will never actually break if the lock is not acquired.
 		return never();
 	}
