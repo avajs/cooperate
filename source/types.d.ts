@@ -10,7 +10,7 @@ export const enum MessageType {
 	SEMAPHORE_FAILED = 32,
 	SEMAPHORE_RELEASE = 33,
 	SEMAPHORE_SUCCEEDED = 34,
-	SEMAPHORE_UP = 35,
+	SEMAPHORE_UP = 35
 }
 
 export type Lock = {

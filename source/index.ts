@@ -247,6 +247,23 @@ export class SemaphoreDownError extends Error {
 	}
 }
 
+const creationMessage = (semaphore: Semaphore, {initialValue, managed}: SemaphoreCreationFailed) => {
+	const initialValueSuffix = `initial value ${semaphore.initialValue} (got ${initialValue})`;
+	if (semaphore instanceof ManagedSemaphore) {
+		if (managed) {
+			return `Failed to create semaphore: expected ${initialValueSuffix}`;
+		}
+
+		return `Failed to create semaphore: expected unmanaged and ${initialValueSuffix}`;
+	}
+
+	if (managed) {
+		return `Failed to create unmanaged semaphore: expected managed and ${initialValueSuffix}`;
+	}
+
+	return `Failed to create unmanaged semaphore: expected ${initialValueSuffix}`;
+};
+
 export class SemaphoreCreationError extends Error {
 	readonly semaphoreId: string;
 
@@ -254,20 +271,8 @@ export class SemaphoreCreationError extends Error {
 		return 'SemaphoreCreationError';
 	}
 
-	constructor(semaphore: Semaphore, {initialValue, managed}: SemaphoreCreationFailed) {
-		const initialValueSuffix = `initial value ${semaphore.initialValue} (got ${initialValue})`;
-		if (semaphore instanceof ManagedSemaphore) {
-			if (managed) {
-				super(`Failed to create semaphore: expected ${initialValueSuffix}`);
-			} else {
-				super(`Failed to create semaphore: expected unmanaged and ${initialValueSuffix}`);
-			}
-		} else if (managed) {
-			super(`Failed to create unmanaged semaphore: expected managed and ${initialValueSuffix}`);
-		} else {
-			super(`Failed to create unmanaged semaphore: expected ${initialValueSuffix}`);
-		}
-
+	constructor(semaphore: Semaphore, reason: SemaphoreCreationFailed) {
+		super(creationMessage(semaphore, reason));
 		this.semaphoreId = semaphore.id;
 	}
 }
@@ -299,7 +304,7 @@ export class SharedContext {
 
 		for await (const {data} of message.replies()) {
 			if (data.type === MessageType.RESERVED_INDEXES) {
-				return data.indexes.map(index => values[index]);
+				return data.indexes.map(index => values[index] ?? never());
 			}
 		}
 
