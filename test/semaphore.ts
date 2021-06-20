@@ -58,7 +58,7 @@ async function probeManualRelease(semaphore: UnmanagedSemaphore) {
 			await semaphore.up(amount);
 			amount++;
 		}
-	} catch (error) {
+	} catch (error: unknown) {
 		if (error instanceof SemaphoreDownError) {
 			return amount - 1;
 		}
@@ -75,7 +75,7 @@ async function probeManagement(semaphore: ManagedSemaphore): Promise<number> {
 			release();
 			amount++;
 		}
-	} catch (error) {
+	} catch (error: unknown) {
 		if (error instanceof SemaphoreDownError) {
 			return amount - 1;
 		}
@@ -154,13 +154,17 @@ test('managed semaphore amounts can\'t be negative', async t => {
 
 	{
 		const release = await semaphore.acquire();
-		t.throws(() => release(-1), {instanceOf: RangeError});
+		t.throws(() => {
+			release(-1);
+		}, {instanceOf: RangeError});
 		release();
 	}
 
 	{
 		const release = await semaphore.acquireNow();
-		t.throws(() => release(-1), {instanceOf: RangeError});
+		t.throws(() => {
+			release(-1);
+		}, {instanceOf: RangeError});
 		release();
 	}
 });
@@ -182,7 +186,9 @@ test('managed semaphore values must be integers', async t => {
 	await t.throwsAsync(semaphore.acquire(0.75), {instanceOf: RangeError});
 	await t.throwsAsync(semaphore.acquireNow(0.75), {instanceOf: RangeError});
 	const release1 = await semaphore.acquire(1);
-	t.throws(() => release1(0.25), {instanceOf: RangeError});
+	t.throws(() => {
+		release1(0.25);
+	}, {instanceOf: RangeError});
 });
 
 test('attempt to acquire() semaphore concurrently in different processes', async t => {
@@ -246,7 +252,9 @@ test(testPartialRelease, ManagedSemaphore.prototype.acquireNow);
 async function overRelease(t: ExecutionContext, acquire: Acquirer) {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
 	const release = await acquire.call(semaphore, 2);
-	t.throws(() => release(3), {
+	t.throws(() => {
+		release(3);
+	}, {
 		instanceOf: RangeError
 	});
 }
@@ -261,7 +269,9 @@ async function overReleaseRemaining(t: ExecutionContext, acquire: Acquirer) {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
 	const release = await acquire.call(semaphore, 3);
 	release(2);
-	t.throws(() => release(2));
+	t.throws(() => {
+		release(2);
+	});
 }
 
 overReleaseRemaining.title = (provided: string, acquire: Acquirer) =>
@@ -274,7 +284,9 @@ test('can always release zero', async t => {
 	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
 	const release = await semaphore.acquire(1);
 	release(1);
-	t.notThrows(() => release(0));
+	t.notThrows(() => {
+		release(0);
+	});
 });
 
 test('managed and unmanaged semaphores share their ID space', async t => {

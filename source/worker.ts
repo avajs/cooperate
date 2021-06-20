@@ -17,14 +17,34 @@ const factory: SharedWorker.Factory = async ({negotiateProtocol}) => {
 
 	for await (const message of protocol.subscribe()) {
 		const {data} = message;
-		if (data.type === MessageType.LOCK) {
-			void acquireLock(message, data);
-		} else if (data.type === MessageType.RESERVE) {
-			reserve(message, data);
-		} else if (data.type === MessageType.SEMAPHORE_DOWN) {
-			void downSemaphore(message, data);
-		} else if (data.type === MessageType.SEMAPHORE_UP) {
-			upSemaphore(message, data);
+		switch (data.type) {
+			case MessageType.LOCK: {
+				void acquireLock(message, data);
+
+				break;
+			}
+
+			case MessageType.RESERVE: {
+				reserve(message, data);
+
+				break;
+			}
+
+			case MessageType.SEMAPHORE_DOWN: {
+				void downSemaphore(message, data);
+
+				break;
+			}
+
+			case MessageType.SEMAPHORE_UP: {
+				upSemaphore(message, data);
+
+				break;
+			}
+
+			// No default
+			default:
+				continue;
 		}
 	}
 };
@@ -32,7 +52,7 @@ const factory: SharedWorker.Factory = async ({negotiateProtocol}) => {
 export default factory;
 
 type Context = {
-	locks: Map<string, {holderId: string; waiting: Array<{ holderId: string; notify: () => void }>}>;
+	locks: Map<string, {holderId: string; waiting: Array<{holderId: string; notify: () => void}>}>;
 	reservedValues: Set<bigint | number | string>;
 	semaphores: Map<string, Semaphore>;
 };
@@ -68,14 +88,14 @@ async function acquireLock(message: ReceivedMessage, {contextId, lockId, wait}: 
 			return;
 		}
 
-		if (current.waiting.length === 0) {
+		const [next, ...waiting] = current.waiting;
+		if (next === undefined) {
 			// We have the lock, but nobody else wants it. Delete it.
 			context.locks.delete(lockId);
 			return;
 		}
 
 		// Transfer the lock to the next in line.
-		const [next, ...waiting] = current.waiting;
 		context.locks.set(lockId, {
 			holderId: next.holderId,
 			waiting
@@ -134,7 +154,7 @@ function reserve(message: ReceivedMessage, {contextId, values}: Reservation): vo
 
 	message.testWorker.teardown(() => {
 		for (const index of indexes) {
-			context.reservedValues.delete(values[index]);
+			context.reservedValues.delete(values[index] ?? never());
 		}
 	});
 
@@ -185,8 +205,13 @@ class Semaphore {
 	up(amount: number) {
 		this.value += amount;
 
-		while (this.queue.length > 0 && this.tryDown(this.queue[0].amount)) {
-			this.queue.shift()?.resolve();
+		for (const item of this.queue) {
+			if (!this.tryDown(item.amount)) {
+				break;
+			}
+
+			item.resolve();
+			this.queue.shift();
 		}
 	}
 }
@@ -245,7 +270,9 @@ async function downSemaphore(
 	} else if (semaphore.tryDown(amount)) {
 		acquired = amount;
 
-		release = message.testWorker.teardown(() => semaphore.up(acquired));
+		release = message.testWorker.teardown(() => {
+			semaphore.up(acquired);
+		});
 	} else {
 		message.reply({
 			type: MessageType.SEMAPHORE_FAILED
