@@ -6,7 +6,7 @@ test('attempt to acquire() semaphore concurrently in different processes', async
 	const {context, release, theirs} = await synchronize({
 		context: new SharedContext(t.title),
 		ours: 'down-second',
-		theirs: 'down-first'
+		theirs: 'down-first',
 	});
 
 	const semaphore = context.createSemaphore(t.title, 2);
@@ -25,7 +25,7 @@ test('semaphore is cleaned up when a test worker exits', async t => {
 	const {context, ours, release: releaseOurs} = await synchronize({
 		context: new SharedContext(t.title),
 		ours: 'torn down',
-		theirs: 'unused'
+		theirs: 'unused',
 	});
 	const semaphore = context.createSemaphore(t.title, 1);
 

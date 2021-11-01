@@ -7,7 +7,7 @@ import {
 	MessageType,
 	Reservation,
 	SemaphoreDown,
-	SemaphoreUp
+	SemaphoreUp,
 } from './types';
 
 type ReceivedMessage = SharedWorker.Experimental.ReceivedMessage<Data>;
@@ -63,7 +63,7 @@ function getContext(id: string): Context {
 	const context = sharedContexts.get(id) ?? {
 		locks: new Map(),
 		reservedValues: new Set(),
-		semaphores: new Map()
+		semaphores: new Map(),
 	};
 	sharedContexts.set(id, context);
 	return context;
@@ -83,7 +83,7 @@ async function acquireLock(message: ReceivedMessage, {contextId, lockId, wait}: 
 			const waiting = current.waiting.filter(({holderId}) => holderId !== message.id);
 			context.locks.set(lockId, {
 				...current,
-				waiting
+				waiting,
 			});
 			return;
 		}
@@ -98,7 +98,7 @@ async function acquireLock(message: ReceivedMessage, {contextId, lockId, wait}: 
 		// Transfer the lock to the next in line.
 		context.locks.set(lockId, {
 			holderId: next.holderId,
-			waiting
+			waiting,
 		});
 
 		next.notify();
@@ -107,7 +107,7 @@ async function acquireLock(message: ReceivedMessage, {contextId, lockId, wait}: 
 	if (!context.locks.has(lockId)) {
 		context.locks.set(lockId, {
 			holderId: message.id,
-			waiting: []
+			waiting: [],
 		});
 
 		for await (const {data} of message.reply({type: MessageType.LOCK_ACQUIRED}).replies()) {
@@ -136,7 +136,7 @@ async function acquireLock(message: ReceivedMessage, {contextId, lockId, wait}: 
 					break;
 				}
 			}
-		}
+		},
 	});
 }
 
@@ -185,7 +185,7 @@ class Semaphore {
 					resolve() {
 						callback();
 						resolve();
-					}
+					},
 				});
 			});
 		}
@@ -220,7 +220,7 @@ function getSemaphore(
 	contextId: string,
 	id: string,
 	initialValue: number,
-	managed: boolean
+	managed: boolean,
 ): [ok: boolean, semaphore: Semaphore] {
 	const context = getContext(contextId);
 	let semaphore = context.semaphores.get(id);
@@ -236,14 +236,14 @@ function getSemaphore(
 
 async function downSemaphore(
 	message: ReceivedMessage,
-	{contextId, semaphore: {managed, id, initialValue}, amount, wait}: SemaphoreDown
+	{contextId, semaphore: {managed, id, initialValue}, amount, wait}: SemaphoreDown,
 ): Promise<void> {
 	const [ok, semaphore] = getSemaphore(contextId, id, initialValue, managed);
 	if (!ok) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
 			initialValue: semaphore.initialValue,
-			managed: semaphore.managed
+			managed: semaphore.managed,
 		});
 		return;
 	}
@@ -275,14 +275,14 @@ async function downSemaphore(
 		});
 	} else {
 		message.reply({
-			type: MessageType.SEMAPHORE_FAILED
+			type: MessageType.SEMAPHORE_FAILED,
 		});
 
 		return;
 	}
 
 	const reply = message.reply({
-		type: MessageType.SEMAPHORE_SUCCEEDED
+		type: MessageType.SEMAPHORE_SUCCEEDED,
 	});
 
 	if (managed) {
@@ -303,14 +303,14 @@ async function downSemaphore(
 
 function upSemaphore(
 	message: ReceivedMessage,
-	{contextId, semaphore: {managed, id, initialValue}, amount}: SemaphoreUp
+	{contextId, semaphore: {managed, id, initialValue}, amount}: SemaphoreUp,
 ) {
 	const [ok, semaphore] = getSemaphore(contextId, id, initialValue, managed);
 	if (!ok) {
 		message.reply({
 			type: MessageType.SEMAPHORE_CREATION_FAILED,
 			initialValue: semaphore.initialValue,
-			managed: semaphore.managed
+			managed: semaphore.managed,
 		});
 		return;
 	}
@@ -318,6 +318,6 @@ function upSemaphore(
 	semaphore.up(amount);
 
 	message.reply({
-		type: MessageType.SEMAPHORE_SUCCEEDED
+		type: MessageType.SEMAPHORE_SUCCEEDED,
 	});
 }

@@ -6,7 +6,7 @@ test('reservations hold across test workers', async t => {
 	const {context, release, theirs} = await synchronize({
 		context: new SharedContext(t.title),
 		ours: 'reserve-last',
-		theirs: 'reserve-first'
+		theirs: 'reserve-first',
 	});
 
 	// Wait for their lock to be freed.
@@ -21,7 +21,7 @@ test('reservations are cleared when the test worker exits', async t => {
 	const {context, theirs} = await synchronize({
 		context: new SharedContext(t.title),
 		ours: 'reserve-last',
-		theirs: 'reserve-first'
+		theirs: 'reserve-first',
 	});
 
 	// Wait for their lock to be freed.

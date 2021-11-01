@@ -1,4 +1,4 @@
-import path from 'path';
+import path from 'node:path';
 import {registerSharedWorker, SharedWorker} from 'ava/plugin';
 import never from 'never';
 
@@ -8,7 +8,7 @@ type ReceivedMessage = SharedWorker.Plugin.Experimental.ReceivedMessage<Data>;
 
 const protocol = registerSharedWorker<Data>({
 	filename: path.join(__dirname, 'worker.js'),
-	supportedProtocols: ['experimental']
+	supportedProtocols: ['experimental'],
 });
 
 export class Lock {
@@ -26,7 +26,7 @@ export class Lock {
 			type: MessageType.LOCK,
 			contextId: this.#context.id,
 			lockId: this.id,
-			wait: true
+			wait: true,
 		});
 
 		for await (const reply of message.replies()) {
@@ -49,7 +49,7 @@ export class Lock {
 			type: MessageType.LOCK,
 			contextId: this.#context.id,
 			lockId: this.id,
-			wait: false
+			wait: false,
 		});
 
 		for await (const reply of message.replies()) {
@@ -85,7 +85,7 @@ export class ManagedSemaphore {
 	constructor(
 		context: SharedContext,
 		public readonly id: string,
-		public readonly initialValue: number
+		public readonly initialValue: number,
 	) {
 		if (initialValue < 0 || !Number.isSafeInteger(initialValue)) {
 			throw new RangeError('initialValue must be a non-negative safe integer');
@@ -111,7 +111,7 @@ export class ManagedSemaphore {
 			amount -= release;
 			reply.reply({
 				type: MessageType.SEMAPHORE_RELEASE,
-				amount: release
+				amount: release,
 			});
 		};
 	}
@@ -133,7 +133,7 @@ export class ManagedSemaphore {
 			amount -= release;
 			reply.reply({
 				type: MessageType.SEMAPHORE_RELEASE,
-				amount: release
+				amount: release,
 			});
 		};
 	}
@@ -145,7 +145,7 @@ export class UnmanagedSemaphore {
 	constructor(
 		context: SharedContext,
 		public readonly id: string,
-		public readonly initialValue: number
+		public readonly initialValue: number,
 	) {
 		if (initialValue < 0 || !Number.isSafeInteger(initialValue)) {
 			throw new RangeError('initialValue must be a non-negative safe integer');
@@ -189,7 +189,7 @@ export class UnmanagedSemaphore {
 			type: MessageType.SEMAPHORE_UP,
 			contextId: this.#context.id,
 			semaphore: {managed: false, id, initialValue},
-			amount
+			amount,
 		});
 
 		for await (const reply of message.replies()) {
@@ -216,7 +216,7 @@ async function downSemaphore(semaphore: Semaphore, contextId: string, amount: nu
 		contextId,
 		semaphore: {managed: semaphore instanceof ManagedSemaphore, id, initialValue},
 		amount,
-		wait
+		wait,
 	});
 
 	for await (const reply of message.replies()) {
@@ -299,7 +299,7 @@ export class SharedContext {
 		const message = protocol.publish({
 			type: MessageType.RESERVE,
 			contextId: this.id,
-			values
+			values,
 		});
 
 		for await (const {data} of message.replies()) {
