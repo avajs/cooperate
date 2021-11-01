@@ -24,7 +24,7 @@ test('attempt to acquire locks concurrently in different processes', async t => 
 	const {release} = await synchronize({
 		context: new SharedContext(t.title),
 		ours: 'release',
-		theirs: 'acquire'
+		theirs: 'acquire',
 	});
 
 	release();

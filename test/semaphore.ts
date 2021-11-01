@@ -27,7 +27,7 @@ test('managed semaphore can\'t register mismatched initial values', async t => {
 
 	const semaphoreTwo = context.createSemaphore(t.title, 2);
 	const expected = {
-		instanceOf: SemaphoreCreationError
+		instanceOf: SemaphoreCreationError,
 	};
 	await t.throwsAsync<SemaphoreCreationError>(semaphoreTwo.acquire(), expected);
 	await t.throwsAsync<SemaphoreCreationError>(semaphoreTwo.acquireNow(), expected);
@@ -40,7 +40,7 @@ test('counting semaphore can\'t register mismatched initial values', async t => 
 
 	const semaphoreTwo = context.createUnmanagedSemaphore(t.title, 2);
 	const expected = {
-		instanceOf: SemaphoreCreationError
+		instanceOf: SemaphoreCreationError,
 	};
 	await t.throwsAsync<SemaphoreCreationError>(semaphoreTwo.down(), expected);
 	await t.throwsAsync<SemaphoreCreationError>(semaphoreTwo.downNow(), expected);
@@ -53,9 +53,9 @@ test('counting semaphore can\'t register mismatched initial values', async t => 
 async function probeManualRelease(semaphore: UnmanagedSemaphore) {
 	let amount = 0;
 	try {
-		while (true) {
-			await semaphore.downNow(amount);
-			await semaphore.up(amount);
+		while (true) { // eslint-disable-line no-constant-condition
+			await semaphore.downNow(amount); // eslint-disable-line no-await-in-loop
+			await semaphore.up(amount); // eslint-disable-line no-await-in-loop
 			amount++;
 		}
 	} catch (error: unknown) {
@@ -70,8 +70,8 @@ async function probeManualRelease(semaphore: UnmanagedSemaphore) {
 async function probeManagement(semaphore: ManagedSemaphore): Promise<number> {
 	let amount = 0;
 	try {
-		while (true) {
-			const release = await semaphore.acquireNow(amount);
+		while (true) { // eslint-disable-line no-constant-condition
+			const release = await semaphore.acquireNow(amount); // eslint-disable-line no-await-in-loop
 			release();
 			amount++;
 		}
@@ -90,9 +90,9 @@ test('acquire unmanaged semaphore', async t => {
 
 	await semaphore.down(2).then(() => unblocked.push(1));
 	t.is(await probeManualRelease(semaphore), 1);
-	const second = semaphore.down(2).then(() => unblocked.push(2)); // eslint-disable-line promise/prefer-await-to-then
+	const second = semaphore.down(2).then(() => unblocked.push(2));
 	t.is(await probeManualRelease(semaphore), 1);
-	const third = semaphore.down().then(() => unblocked.push(3)); // eslint-disable-line promise/prefer-await-to-then
+	const third = semaphore.down().then(() => unblocked.push(3));
 	t.is(await probeManualRelease(semaphore), 1);
 	await semaphore.up();
 	await second;
@@ -107,17 +107,14 @@ test('acquire managed semaphore', async t => {
 	const unblocked: number[] = [];
 
 	const one = semaphore.acquire(2);
-	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
-	one.then(() => unblocked.push(1));
+	void one.then(() => unblocked.push(1));
 	const releaseOne = await one;
 	t.is(await probeManagement(semaphore), 1);
 	const two = semaphore.acquire(2);
-	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
-	two.then(() => unblocked.push(2));
+	void two.then(() => unblocked.push(2));
 	t.is(await probeManagement(semaphore), 1);
 	const three = semaphore.acquire();
-	// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-floating-promises
-	three.then(() => unblocked.push(3));
+	void three.then(() => unblocked.push(3));
 	t.is(await probeManagement(semaphore), 1);
 	releaseOne();
 	const releaseTwo = await two;
@@ -152,7 +149,7 @@ test('managed semaphore amounts can\'t be negative', async t => {
 	await t.throwsAsync(semaphore.acquireNow(-1), {instanceOf: RangeError});
 	t.is(await probeManagement(semaphore), 1);
 
-	{
+	{ // eslint-disable-line no-lone-blocks
 		const release = await semaphore.acquire();
 		t.throws(() => {
 			release(-1);
@@ -160,7 +157,7 @@ test('managed semaphore amounts can\'t be negative', async t => {
 		release();
 	}
 
-	{
+	{ // eslint-disable-line no-lone-blocks
 		const release = await semaphore.acquireNow();
 		t.throws(() => {
 			release(-1);
@@ -195,7 +192,7 @@ test('attempt to acquire() semaphore concurrently in different processes', async
 	const {context, release: releaseLock, theirs} = await synchronize({
 		context: new SharedContext(t.title),
 		ours: 'down-first',
-		theirs: 'down-second'
+		theirs: 'down-second',
 	});
 
 	const semaphore = context.createSemaphore(t.title, 2);
@@ -215,7 +212,7 @@ test('semaphore is cleaned up when a test worker exits', async t => {
 	const {context, theirs} = await synchronize({
 		context: new SharedContext(t.title),
 		ours: 'unused',
-		theirs: 'torn down'
+		theirs: 'torn down',
 	});
 	const semaphore = context.createSemaphore(t.title, 1);
 
@@ -255,7 +252,7 @@ async function overRelease(t: ExecutionContext, acquire: Acquirer) {
 	t.throws(() => {
 		release(3);
 	}, {
-		instanceOf: RangeError
+		instanceOf: RangeError,
 	});
 }
 

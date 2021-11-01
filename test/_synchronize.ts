@@ -11,7 +11,7 @@ type Synchronized = {
 export default async function synchronize({
 	context,
 	ours: ourId,
-	theirs: theirId
+	theirs: theirId,
 }: {
 	context: SharedContext;
 	ours: string;
@@ -21,24 +21,24 @@ export default async function synchronize({
 	const theirs = context.createLock(theirId);
 
 	let release;
-	while (true) {
+	while (true) { // eslint-disable-line no-constant-condition
 		try {
-			release = await ours.acquireNow();
+			release = await ours.acquireNow(); // eslint-disable-line no-await-in-loop
 			break;
 		} catch {
 			// We must acquire our lock. Try again.
-			await delay(Math.random() * 10);
+			await delay(Math.random() * 10); // eslint-disable-line no-await-in-loop
 		}
 	}
 
 	// We have our lock. Wait for them to get theirs.
-	while (true) {
+	while (true) { // eslint-disable-line no-constant-condition
 		try {
-			const releaseTheirs = await theirs.acquireNow();
+			const releaseTheirs = await theirs.acquireNow(); // eslint-disable-line no-await-in-loop
 			// Release their lock if we managed to acquire it.
 			releaseTheirs();
 			// They must acquire their lock. Try again.
-			await delay(Math.random() * 10);
+			await delay(Math.random() * 10); // eslint-disable-line no-await-in-loop
 		} catch {
 			// We don't have their lock, so they must be waiting for ours.
 			break;
