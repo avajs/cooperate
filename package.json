@@ -1,6 +1,6 @@
 {
 	"name": "@ava/cooperate",
-	"version": "0.2.0",
+	"version": "1.0.0",
 	"description": "Plugin to enable cooperation between AVA test files",
 	"engines": {
 		"node": ">=12.22 <13 || >=14.17 <15 || >=16.4 <17 || >=17"
