@@ -1,14 +1,13 @@
-import path from 'node:path';
 import {registerSharedWorker, SharedWorker} from 'ava/plugin';
 import never from 'never';
 
-import {Data, MessageType, SemaphoreCreationFailed} from './types';
+import {Data, MessageType, SemaphoreCreationFailed} from './types.js';
 
-type ReceivedMessage = SharedWorker.Plugin.Experimental.ReceivedMessage<Data>;
+type ReceivedMessage = SharedWorker.Plugin.ReceivedMessage<Data>;
 
 const protocol = registerSharedWorker<Data>({
-	filename: path.join(__dirname, 'worker.js'),
-	supportedProtocols: ['experimental'],
+	filename: new URL('worker.js', import.meta.url),
+	supportedProtocols: ['ava-4'],
 });
 
 export class Lock {
@@ -70,7 +69,7 @@ export class Lock {
 }
 
 export class LockAcquisitionError extends Error {
-	get name() {
+	override get name() {
 		return 'LockAcquisitionError';
 	}
 
@@ -238,7 +237,7 @@ async function downSemaphore(semaphore: Semaphore, contextId: string, amount: nu
 }
 
 export class SemaphoreDownError extends Error {
-	get name() {
+	override get name() {
 		return 'SemaphoreDownError';
 	}
 
@@ -267,7 +266,7 @@ const creationMessage = (semaphore: Semaphore, {initialValue, managed}: Semaphor
 export class SemaphoreCreationError extends Error {
 	readonly semaphoreId: string;
 
-	get name() {
+	override get name() {
 		return 'SemaphoreCreationError';
 	}
 

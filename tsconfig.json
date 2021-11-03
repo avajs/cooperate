@@ -1,9 +1,7 @@
 {
-	"extends": "@sindresorhus/tsconfig",
+	"extends": "@sindresorhus/tsconfig/tsconfig.json",
 	"compilerOptions": {
 		"outDir": "dist",
-		"module": "CommonJS",
-		"esModuleInterop": true,
 		"sourceMap": true
 	},
 	"include": [

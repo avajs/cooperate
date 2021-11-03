@@ -1,6 +1,6 @@
 import test from 'ava';
-import {SharedContext, SemaphoreDownError} from '../source';
-import synchronize from './_synchronize';
+import {SharedContext, SemaphoreDownError} from '../source/index.js';
+import synchronize from './_synchronize.js';
 
 test('attempt to acquire() semaphore concurrently in different processes', async t => {
 	const {context, release, theirs} = await synchronize({

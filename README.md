@@ -1,6 +1,6 @@
 # @ava/cooperate
 
-Experimental AVA plugin to enable cooperation between test files.
+AVA 4 plugin to enable cooperation between test files.
 
 Install this as a development dependency alongside AVA itself:
 
@@ -8,24 +8,12 @@ Install this as a development dependency alongside AVA itself:
 npm install --save-dev @ava/cooperate
 ```
 
-Then make sure you've enabled the shared workers experiment:
-
-`ava.config.js`:
-
-```js
-export default {
-  nonSemVerExperiments: {
-    sharedWorkers: true
-  }
-};
-```
-
 ## Usage
 
 Cooperation takes place within a shared context:
 
 ```js
-const {SharedContext} = require('@ava/cooperate');
+import {SharedContext} from '@ava/cooperate';
 
 const context = new SharedContext('my-context');
 ```
