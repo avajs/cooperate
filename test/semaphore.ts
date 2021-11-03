@@ -1,6 +1,6 @@
-import test, {ExecutionContext} from 'ava';
-import {SharedContext, SemaphoreCreationError, SemaphoreDownError, UnmanagedSemaphore, ManagedSemaphore} from '../source';
-import synchronize from './_synchronize';
+import test from 'ava';
+import {SharedContext, SemaphoreCreationError, SemaphoreDownError, UnmanagedSemaphore, ManagedSemaphore} from '../source/index.js';
+import synchronize from './_synchronize.js';
 
 test('acquire binary semaphore', async t => {
 	const semaphore = new SharedContext(t.title).createUnmanagedSemaphore(t.title, 1);
@@ -9,7 +9,7 @@ test('acquire binary semaphore', async t => {
 	await t.notThrowsAsync(first);
 
 	const error = await t.throwsAsync<SemaphoreDownError>(semaphore.downNow(), {instanceOf: SemaphoreDownError});
-	t.is(error.semaphoreId, semaphore.id);
+	t.is(error!.semaphoreId, semaphore.id);
 
 	const second = semaphore.down();
 	await semaphore.up();
@@ -231,48 +231,58 @@ test('semaphore is cleaned up when a test worker exits', async t => {
 
 type Acquirer = ManagedSemaphore['acquire'];
 
-async function testPartialRelease(t: ExecutionContext, acquire: Acquirer) {
-	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 3);
-	const release = await acquire.call(semaphore, 3);
-	t.is(await probeManagement(semaphore), 0);
-	release(1);
-	t.is(await probeManagement(semaphore), 1);
-	release(2);
-	t.is(await probeManagement(semaphore), 3);
-}
+const testPartialRelease = test.macro({
+	async exec(t, acquire: Acquirer) {
+		const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 3);
+		const release = await acquire.call(semaphore, 3);
+		t.is(await probeManagement(semaphore), 0);
+		release(1);
+		t.is(await probeManagement(semaphore), 1);
+		release(2);
+		t.is(await probeManagement(semaphore), 3);
+	},
 
-testPartialRelease.title = (provided: string, acquire: Acquirer) => `${provided || `${acquire.name}()`} acquisitions can be partially released`;
+	title(provided, acquire) {
+		return `${provided ?? `${acquire.name}()`} acquisitions can be partially released`;
+	},
+});
 
 test(testPartialRelease, ManagedSemaphore.prototype.acquire);
 test(testPartialRelease, ManagedSemaphore.prototype.acquireNow);
 
-async function overRelease(t: ExecutionContext, acquire: Acquirer) {
-	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
-	const release = await acquire.call(semaphore, 2);
-	t.throws(() => {
-		release(3);
-	}, {
-		instanceOf: RangeError,
-	});
-}
+const overRelease = test.macro({
+	async exec(t, acquire: Acquirer) {
+		const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
+		const release = await acquire.call(semaphore, 2);
+		t.throws(() => {
+			release(3);
+		}, {
+			instanceOf: RangeError,
+		});
+	},
 
-overRelease.title = (provided: string, acquire: Acquirer) =>
-	`${provided || `${acquire.name}()`} can't release more than the acquired amount`;
+	title(provided, acquire) {
+		return `${provided ?? `${acquire.name}()`} can't release more than the acquired amount`;
+	},
+});
 
 test(overRelease, ManagedSemaphore.prototype.acquire);
 test(overRelease, ManagedSemaphore.prototype.acquireNow);
 
-async function overReleaseRemaining(t: ExecutionContext, acquire: Acquirer) {
-	const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
-	const release = await acquire.call(semaphore, 3);
-	release(2);
-	t.throws(() => {
+const overReleaseRemaining = test.macro({
+	async exec(t, acquire: Acquirer) {
+		const semaphore = new SharedContext(test.meta.file).createSemaphore(t.title, 4);
+		const release = await acquire.call(semaphore, 3);
 		release(2);
-	});
-}
+		t.throws(() => {
+			release(2);
+		});
+	},
 
-overReleaseRemaining.title = (provided: string, acquire: Acquirer) =>
-	`${provided || `${acquire.name}()`} can't release more than the remaining amount`;
+	title(provided, acquire) {
+		return `${provided ?? `${acquire.name}()`} can't release more than the remaining amount`;
+	},
+});
 
 test(overReleaseRemaining, ManagedSemaphore.prototype.acquire);
 test(overReleaseRemaining, ManagedSemaphore.prototype.acquireNow);

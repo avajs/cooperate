@@ -1,6 +1,6 @@
 import test from 'ava';
-import {SharedContext} from '../source';
-import synchronize from './_synchronize';
+import {SharedContext} from '../source/index.js';
+import synchronize from './_synchronize.js';
 
 const context = new SharedContext(test.meta.file);
 test.before(async t => {

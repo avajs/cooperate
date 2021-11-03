@@ -1,6 +1,6 @@
 import test from 'ava';
-import {SharedContext, LockAcquisitionError} from '../source';
-import synchronize from './_synchronize';
+import {SharedContext, LockAcquisitionError} from '../source/index.js';
+import synchronize from './_synchronize.js';
 
 test('acquire locks', async t => {
 	const lock = new SharedContext(test.meta.file).createLock(t.title);
@@ -9,7 +9,7 @@ test('acquire locks', async t => {
 	await t.notThrowsAsync(first);
 
 	const error = await t.throwsAsync<LockAcquisitionError>(lock.acquireNow(), {instanceOf: LockAcquisitionError});
-	t.is(error.lockId, lock.id);
+	t.is(error!.lockId, lock.id);
 
 	const second = lock.acquire();
 	(await first)();

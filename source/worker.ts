@@ -8,12 +8,12 @@ import {
 	Reservation,
 	SemaphoreDown,
 	SemaphoreUp,
-} from './types';
+} from './types.js';
 
-type ReceivedMessage = SharedWorker.Experimental.ReceivedMessage<Data>;
+type ReceivedMessage = SharedWorker.ReceivedMessage<Data>;
 
 const factory: SharedWorker.Factory = async ({negotiateProtocol}) => {
-	const protocol = negotiateProtocol<Data>(['experimental']).ready();
+	const protocol = negotiateProtocol<Data>(['ava-4']).ready();
 
 	for await (const message of protocol.subscribe()) {
 		const {data} = message;

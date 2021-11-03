@@ -10,7 +10,10 @@
 		"source",
 		"!dist/source/worker.d.ts"
 	],
-	"main": "dist/source",
+	"type": "module",
+	"exports": {
+		".": "./dist/index.js"
+	},
 	"types": "dist/source",
 	"scripts": {
 		"build": "del-cli dist && tsc",
@@ -28,9 +31,9 @@
 	"repository": "avajs/cooperate",
 	"license": "MIT",
 	"devDependencies": {
-		"@ava/typescript": "^1.1.1",
-		"@sindresorhus/tsconfig": "^1.0.2",
-		"ava": "^3.13.0",
+		"@ava/typescript": "^3.0.0",
+		"@sindresorhus/tsconfig": "^2.0.0",
+		"ava": "4.0.0-rc.1",
 		"c8": "^7.10.0",
 		"del-cli": "^4.0.1",
 		"delay": "^5.0.0",
